@@ -112,12 +112,21 @@ Models, webpages, files, MCP servers, tool descriptions, and external content ca
 ## 8. Current Progress
 
 ```text
-Step: 03
-Behavior delivered: Architecture, security, state, contracts, and failure model
-Files changed: docs/ARCHITECTURE.md, docs/SECURITY.md, docs/decisions/0001-sqlite-as-initial-persistence.md, docs/decisions/0002-separate-worker-process.md, docs/decisions/0003-local-inference-as-default.md, docs/decisions/0004-server-side-tool-policy.md, docs/decisions/0005-isolated-code-execution.md, docs/PROJECT_MEMORY.md, docs/PROGRESS.md
-Verification: Documentation consistency review. Cross-checked ARCHITECTURE.md, SECURITY.md, and ADRs against PRD.md, REFERENCE_MAP.md, and PROJECT_MEMORY.md. Verified explicit trust boundaries, at-least-once task execution, cryptographic approval fingerprinting, state machine completeness, and no speculative microservice infrastructure. No application code was implemented.
-Known limitations: docs/BUILD_GUIDE.md and AGENTS.md remain absent; no application scaffold, package manifest, or lockfile exists; pnpm is unavailable; Ollama and Docker local services were not running; all contracts and state machines remain design specifications pending future implementation steps.
-Next step: Step 04
+Step: 04
+Behavior delivered: Runnable web shell, API health endpoint, worker lifecycle, developer tooling
+Files changed: package.json, pnpm-workspace.yaml, pnpm-lock.yaml, tsconfig.base.json, tsconfig.json, eslint.config.js, .env.example, .gitignore, README.md, apps/server/*, apps/worker/*, apps/web/*, packages/core/*, packages/db/*, packages/providers/*, docs/PROGRESS.md, docs/PROJECT_MEMORY.md
+Verification commands and actual outcomes:
+- pnpm install (code 0; generated lockfile, installed 344+ packages)
+- pnpm lint (code 0; 0 errors across all projects)
+- pnpm typecheck (code 0; strict project references verified)
+- pnpm test (code 0; 6 test suites, 11/11 tests passed)
+- pnpm build (code 0; 6 packages/apps built cleanly in 1.2s)
+- pnpm check (code 0; full lint, typecheck, test, and build pipeline verified)
+- curl GET http://127.0.0.1:3000/api/health (code 0; returned {"status":"healthy","version":"0.1.0-alpha","privacy_mode":"local_only","database":"connected","worker":"active"})
+- Worker process start/stop (code 0; logged startup and standby, cleanly released on SIGINT/SIGTERM)
+- Web preview on http://127.0.0.1:5173 (code 0; served compiled HTML shell with Open Dot Spell title)
+Known limitations/blockers: docs/BUILD_GUIDE.md and AGENTS.md remain absent; Ollama and Docker services were not active; no task execution or chat orchestration is implemented yet.
+Next step: Step 05
 ```
 
 ## 9. Decision Log
@@ -133,5 +142,6 @@ Next step: Step 04
 | 2026-10-02 | Maintain local inference as default with Ollama; remote providers are explicit opt-in. | ADR 0003; privacy and local-first product requirement. | Adopted |
 | 2026-10-02 | Enforce server-side tool policy with immutable SHA-256 action fingerprinting for approvals. | ADR 0004; protect host against prompt injection and tampering. | Adopted |
 | 2026-10-02 | Require isolated container sandbox for code execution; prohibit host shell execution. | ADR 0005; host security and credential containment. | Adopted |
+| 2026-10-02 | Establish pnpm monorepo with apps/ (web, server, worker) and packages/ (core, db, providers) using strict TypeScript and LibSQL driver for Drizzle. | Step 04 runnable scaffold; cross-platform driver compatibility on Node 26. | Adopted |
 
 Future decisions should include the date, the concrete decision, its evidence or rationale, and its current status. Update this memory after each numbered step with only behavior that has actually been verified.

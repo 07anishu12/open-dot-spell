@@ -1,0 +1,28 @@
+{
+  "name": "open-dot-spell",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "packageManager": "pnpm@12.8.1",
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "build": "pnpm --filter '@open-dot-spell/*' run build",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "start": "pnpm --filter @open-dot-spell/server start",
+    "dev:server": "pnpm --filter @open-dot-spell/server dev",
+    "dev:web": "pnpm --filter @open-dot-spell/web dev",
+    "dev:worker": "pnpm --filter @open-dot-spell/worker dev"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.20.0",
+    "eslint": "^9.20.1",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.24.0",
+    "vitest": "^3.0.5"
+  }
+}

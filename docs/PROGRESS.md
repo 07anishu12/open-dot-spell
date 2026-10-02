@@ -119,5 +119,68 @@ Define the laptop-sized local-first system architecture, trust boundaries, minim
 
 ### Next step
 
-Step 04. Do not begin it until the next numbered prompt is supplied.
+Step 04.
+
+## Step 04 — Establish the smallest runnable repository
+
+**Status:** Implementation complete and verified. Runnable web shell, API health endpoint, worker lifecycle, and developer tooling operational.
+
+### Objective
+
+Establish the minimal monorepo structure (`apps/web`, `apps/server`, `apps/worker`, `packages/core`, `packages/db`, `packages/providers`), configure pnpm, strict TypeScript, ESLint, Vitest, Fastify, React/Vite, Zod, and Drizzle with a supported SQLite driver, implement the health endpoint and worker lifecycle, verify developer commands, and commit the lockfile.
+
+### Files changed
+
+- `package.json` — root workspace configuration, developer scripts (`lint`, `typecheck`, `test`, `build`, `check`).
+- `pnpm-workspace.yaml` — workspace package definitions and build approval configuration.
+- `pnpm-lock.yaml` — pinned dependency lockfile.
+- `tsconfig.base.json` — root strict TypeScript base configuration.
+- `tsconfig.json` — root composite project references.
+- `eslint.config.js` — ESLint 9 flat configuration with typescript-eslint.
+- `.env.example` — minimal local development environment variables.
+- `.gitignore` — comprehensive git safety exclusions (secrets, databases, build outputs, OS files).
+- `README.md` — project overview, workspace structure, and verified developer commands.
+- `packages/core/` — core schemas (`HealthResponse`, `PrivacyMode`, state enums), action fingerprinting, tests.
+- `packages/db/` — Drizzle ORM schema, LibSQL SQLite client factory, in-memory connection tests.
+- `packages/providers/` — model provider interface, streaming event types, Ollama provider stub, tests.
+- `apps/server/` — Fastify application, `GET /api/health`, Host validation, loopback CORS, automated smoke tests.
+- `apps/worker/` — decoupled worker process class, start/stop lifecycle, signal handlers, lifecycle tests.
+- `apps/web/` — React/Vite web application shell, system readiness component, unit tests.
+- `docs/PROGRESS.md` — this Step 04 progress update.
+- `docs/PROJECT_MEMORY.md` — Step 04 status and architecture decision log entry.
+
+### Verification commands and actual outcomes
+
+1. `pnpm install` — Exit code 0. Resolved and installed all workspace dependencies, generated reproducible `pnpm-lock.yaml`.
+2. `pnpm lint` — Exit code 0. Clean ESLint 9 run across all 6 workspace projects with 0 errors/warnings.
+3. `pnpm typecheck` — Exit code 0. Full strict TypeScript type checking (`tsc -b`) passed without error.
+4. `pnpm test` — Exit code 0. Ran 6 test suites with Vitest (11/11 tests passing):
+   - `packages/core/test/core.test.ts` (4 passed)
+   - `packages/db/test/db.test.ts` (1 passed)
+   - `packages/providers/test/provider.test.ts` (1 passed)
+   - `apps/server/test/health.test.ts` (2 passed)
+   - `apps/worker/test/worker.test.ts` (2 passed)
+   - `apps/web/test/app.test.tsx` (1 passed)
+5. `pnpm build` — Exit code 0. Successfully compiled all TypeScript libraries, server, worker, and built Vite web client bundle (`dist/index.html` 0.33 kB, `dist/assets/index-*.js` 225.85 kB) in 1.2s.
+6. `pnpm check` — Exit code 0. Executed composite verification gate (`pnpm lint && pnpm typecheck && pnpm test && pnpm build`).
+7. `curl -i -H "Host: 127.0.0.1:3000" http://127.0.0.1:3000/api/health` — Exit code 0. Returned HTTP 200 OK with `{"status":"healthy","version":"0.1.0-alpha","privacy_mode":"local_only","database":"connected","worker":"active"}`.
+8. Worker lifecycle start/stop — Worker process started in background, logged `Open Dot Spell Worker ready. Standby mode (no tasks claimed)`, and terminated cleanly on process kill signal.
+9. Web preview test — `pnpm --filter @open-dot-spell/web preview` served on `http://127.0.0.1:5173`; verified via curl returning the rendered application HTML shell.
+
+### Manual verification
+
+- Confirmed loopback binding and Host header validation rejects malicious or non-loopback host headers (`HTTP 403 Forbidden`).
+- Confirmed zero credentials, API keys, or machine secrets are present in `.env.example` or exposed by the API.
+- Confirmed the worker does not claim tasks or execute task queues prematurely.
+
+### Known limitations/blockers
+
+- `docs/BUILD_GUIDE.md` and `AGENTS.md` remain absent from the repository.
+- Ollama and Docker local services were not running; inference and container features remain unverified until future steps.
+- Task queues, conversation orchestration, and durable execution remain deferred to future numbered implementation steps.
+
+### Next step
+
+Step 05. Do not begin it until the next numbered prompt is supplied.
+
 
