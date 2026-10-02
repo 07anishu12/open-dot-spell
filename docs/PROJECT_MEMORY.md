@@ -124,8 +124,7 @@ Verification commands and actual outcomes:
 - pnpm check (code 0; full lint, typecheck, test, and build pipeline verified)
 - curl GET http://127.0.0.1:3000/api/health (code 0; returned {"status":"healthy","version":"0.1.0-alpha","privacy_mode":"local_only","database":"connected","worker":"active"})
 - Worker process start/stop (code 0; logged startup and standby, cleanly released on SIGINT/SIGTERM)
-- Web preview on http://127.0.0.1:5173 (code 0; served compiled HTML shell with Open Dot Spell title)
-Known limitations/blockers: docs/BUILD_GUIDE.md and AGENTS.md remain absent; Ollama and Docker services were not active; no task execution or chat orchestration is implemented yet.
+Known limitations/blockers: docs/BUILD_GUIDE.md remains absent; Ollama and Docker services were not active; no task execution or chat orchestration is implemented yet.
 Next step: Step 05
 ```
 
@@ -143,5 +142,6 @@ Next step: Step 05
 | 2026-10-02 | Enforce server-side tool policy with immutable SHA-256 action fingerprinting for approvals. | ADR 0004; protect host against prompt injection and tampering. | Adopted |
 | 2026-10-02 | Require isolated container sandbox for code execution; prohibit host shell execution. | ADR 0005; host security and credential containment. | Adopted |
 | 2026-10-02 | Establish pnpm monorepo with apps/ (web, server, worker) and packages/ (core, db, providers) using strict TypeScript and LibSQL driver for Drizzle. | Step 04 runnable scaffold; cross-platform driver compatibility on Node 26. | Adopted |
+| 2026-10-02 | Adopt Persistent Git / GitHub Rule: every completed step requires focused commit, verification, push to origin, and structured report. | User instruction; repository traceability and synchronization. | Adopted |
 
 Future decisions should include the date, the concrete decision, its evidence or rationale, and its current status. Update this memory after each numbered step with only behavior that has actually been verified.
