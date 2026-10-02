@@ -1,4 +1,4 @@
-# OpenDoor Environment Assessment
+# Open Dot Spell Environment Assessment
 
 **Step:** 01 — Inspect the development environment and hardware  
 **Observed:** 2026-10-02T17:13:58Z  
@@ -6,14 +6,14 @@
 
 ## Repository gate
 
-The assigned workspace is writable, but it is **not currently a Git repository** and does not contain an OpenDoor project:
+The assigned workspace is writable, but it is **not currently a Git repository** and does not contain an Open Dot Spell project:
 
 - `git status --short --branch` and `git rev-parse --show-toplevel` both report that the directory is not a Git repository.
 - The workspace contains only the agent bookkeeping directory and no application source.
 - `AGENTS.md`, `CLAUDE.md`, `docs/BUILD_GUIDE.md`, `docs/PROGRESS.md`, `package.json`, and `pnpm-lock.yaml` were absent at the start of this assessment.
 - The current directory passed a write-permission check.
 
-**Conclusion:** this workspace cannot yet be confirmed as the separate OpenDoor development repository. It must not be used for application implementation until a separate writable Git repository is supplied or checked out. No other Desktop directories were inspected because no OpenDoor path was identified. This document is the requested assessment output; no application code was created.
+**Conclusion:** this workspace cannot yet be confirmed as the separate Open Dot Spell development repository. It must not be used for application implementation until a separate writable Git repository is supplied or checked out. No other Desktop directories were inspected because no Open Dot Spell path was identified. This document is the requested assessment output; no application code was created.
 
 ## Hardware observations
 
@@ -48,19 +48,19 @@ No installation, model pull, daemon start, or configuration change was performed
 
 ## Supported runtime selection
 
-Until the actual OpenDoor repository supplies a manifest and lockfile, the conservative baseline is:
+Until the actual Open Dot Spell repository supplies a manifest and lockfile, the conservative baseline is:
 
 - **Node.js 24 LTS on macOS arm64** for development and production-oriented checks. The Node.js project states that production applications should use Active LTS or Maintenance LTS releases; Node 24 is listed as LTS. The installed Node 26.10.0 is usable for inspection but is the Current line, so it is not the selected baseline.
 - **pnpm 12.x**, once installed in the development repository. The official pnpm installation documentation lists pnpm 12 as the current line, supports macOS arm64, and lists Node 24 and Node 26 compatibility.
 - **Git** is already available.
 - **Ollama local inference** is the default provider target. Remote providers are not configured or used.
-- **Docker** remains an optional local development dependency until the OpenDoor build guide identifies a concrete need. Its CLI is present, but its daemon is unavailable.
+- **Docker** remains an optional local development dependency until the Open Dot Spell build guide identifies a concrete need. Its CLI is present, but its daemon is unavailable.
 
-This is a runtime selection, not a claim that the missing OpenDoor package manifest has been validated. The eventual repository should pin the chosen Node and pnpm versions in its own configuration.
+This is a runtime selection, not a claim that the missing Open Dot Spell package manifest has been validated. The eventual repository should pin the chosen Node and pnpm versions in its own configuration.
 
 ## Missing prerequisites and blockers
 
-1. A separate writable Git development repository containing the OpenDoor project is required before application work or a focused commit can occur.
+1. A separate writable Git development repository containing the Open Dot Spell project is required before application work or a focused commit can occur.
 2. `docs/BUILD_GUIDE.md`, project instructions, package manifests, and a lockfile must be available in that repository.
 3. pnpm is not installed. Follow the official pnpm installation page in the development repository; no installer was run during this assessment.
 4. The Ollama app/CLI is installed, but its local server was not running. A user must manually open/start it before any inference trial; this assessment did not enable a background service.
@@ -70,7 +70,7 @@ This is a runtime selection, not a claim that the missing OpenDoor package manif
 
 ## Local inference trial plan
 
-This plan is intentionally deferred until a real OpenDoor repository and a manually available local Ollama server exist.
+This plan is intentionally deferred until a real Open Dot Spell repository and a manually available local Ollama server exist.
 
 1. In the separate development repository, read its `BUILD_GUIDE.md`, manifests, and lockfile before choosing any model or installing dependencies.
 2. Manually open Ollama. Verify the server and enumerate local models with the official CLI/API (`ollama ls` or the local `/api/tags` endpoint). Record each returned model's exact `name`/tag and digest where available. If the server is unavailable, record the failure rather than calling the model inventory empty.
@@ -85,7 +85,7 @@ This plan is intentionally deferred until a real OpenDoor repository and a manua
 6. Record the exact model identifier, digest, request shape, capability result, and failure messages. Do not record private prompts or send personal data to a remote provider.
 7. Do not turn this trial into a performance claim. Latency, memory use, concurrency, and workload suitability remain unverified until the later workload measurement step (step 34).
 
-The Ollama capability references specifically cover tool calling and structured outputs. OpenDoor must still validate every runtime tool action server-side; a model's tool description or emitted call must never grant permission.
+The Ollama capability references specifically cover tool calling and structured outputs. Open Dot Spell must still validate every runtime tool action server-side; a model's tool description or emitted call must never grant permission.
 
 ## Official guidance checked
 
@@ -102,10 +102,10 @@ These are the official sources consulted for the setup decisions above:
 
 ## Reproducible environment checklist
 
-Run these checks from the separate OpenDoor development repository. The outcomes below are the outcomes of this assessment where the same check was possible in the assigned workspace.
+Run these checks from the separate Open Dot Spell development repository. The outcomes below are the outcomes of this assessment where the same check was possible in the assigned workspace.
 
-- [ ] `pwd` — enter the separate OpenDoor Git repository, not the current untracked workspace.
-- [ ] `git status --short --branch` — must identify the OpenDoor repository and preserve any pre-existing user changes.
+- [ ] `pwd` — enter the separate Open Dot Spell Git repository, not the current untracked workspace.
+- [ ] `git status --short --branch` — must identify the Open Dot Spell repository and preserve any pre-existing user changes.
 - [ ] Confirm `AGENTS.md`/`CLAUDE.md`, `docs/BUILD_GUIDE.md`, `docs/PROGRESS.md` (if present), `package.json`, and the lockfile before development.
 - [x] `test -w .` — current assigned workspace is writable.
 - [x] `uname -s -r -m -p` and `sw_vers` — macOS 27.0.1 on arm64.
@@ -121,7 +121,7 @@ Run these checks from the separate OpenDoor development repository. The outcomes
 - [x] `docker --version` — Docker `29.8.0` CLI.
 - [ ] `docker info` — pending a manually running Docker daemon, only if project checks require it.
 - [ ] Run the local inference capability probes with an explicitly approved, locally installed model.
-- [ ] Re-run the checklist from the actual OpenDoor repository and attach the outputs to the next progress update.
+- [ ] Re-run the checklist from the actual Open Dot Spell repository and attach the outputs to the next progress update.
 
 ### Commands actually run and outcomes
 

@@ -1,1 +1,1 @@
-# open-dot-spell
+# Open Dot Spell
