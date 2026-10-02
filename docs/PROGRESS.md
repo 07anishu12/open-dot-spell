@@ -479,7 +479,12 @@ Implement persistent conversation and message lifecycle APIs, transactional turn
 ### Known limitations/blockers
 
 - Live local model inference requires starting `ollama serve` and pulling a supported model outside the agent run.
-- `docs/BUILD_GUIDE.md` remains absent from the repository.
+- `docs/BUILD_GUIDE.md` authored and verified (resolves Steps 01–09 Arena audit finding).
+
+### Audit Resolution (Steps 01–09 Arena Audit)
+
+- Created `docs/BUILD_GUIDE.md` documenting prerequisites, pnpm/Node setup, workspace structure, development commands, build commands, test/check gates, database and migration architecture, local server/worker startup, synthetic and real Ollama verification, configuration, and troubleshooting.
+- Resolved the single missing document limitation identified during the independent Steps 01–09 verification.
 
 ### Next step
 
