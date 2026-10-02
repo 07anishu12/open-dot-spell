@@ -112,21 +112,25 @@ Models, webpages, files, MCP servers, tool descriptions, and external content ca
 ## 8. Current Progress
 
 ```text
-Step: 04
-Behavior delivered: Runnable web shell, API health endpoint, worker lifecycle, developer tooling
-Files changed: package.json, pnpm-workspace.yaml, pnpm-lock.yaml, tsconfig.base.json, tsconfig.json, eslint.config.js, .env.example, .gitignore, README.md, apps/server/*, apps/worker/*, apps/web/*, packages/core/*, packages/db/*, packages/providers/*, docs/PROGRESS.md, docs/PROJECT_MEMORY.md
+Step: 06
+Behavior delivered: Single-owner pairing flow, loopback binding enforcement, host/origin gatekeeping, workspace resource authorization, encrypted provider credential storage, and redacted structured logging
+Files changed: apps/server/src/app.ts, apps/server/src/auth.ts, apps/server/src/index.ts, apps/server/test/security.test.ts, packages/core/src/index.ts, packages/core/test/core.test.ts, packages/db/src/schema.ts, packages/db/src/migrations.ts, packages/db/src/queries.ts, packages/db/test/persistence.test.ts, docs/SECURITY.md, docs/ARCHITECTURE.md, docs/PROJECT_MEMORY.md, docs/PROGRESS.md
 Verification commands and actual outcomes:
-- pnpm install (code 0; generated lockfile, installed 344+ packages)
-- pnpm lint (code 0; 0 errors across all projects)
-- pnpm typecheck (code 0; strict project references verified)
-- pnpm test (code 0; 6 test suites, 11/11 tests passed)
-- pnpm build (code 0; 6 packages/apps built cleanly in 1.2s)
-- pnpm check (code 0; full lint, typecheck, test, and build pipeline verified)
-- curl GET http://127.0.0.1:3000/api/health (code 0; returned {"status":"healthy","version":"0.1.0-alpha","privacy_mode":"local_only","database":"connected","worker":"active"})
-- Worker process start/stop (code 0; logged startup and standby, cleanly released on SIGINT/SIGTERM)
-- Persistence integration tests (code 0; 7 tests verified fresh migration, repeated migration, restart persistence, foreign keys, migration rollback on failure, atomic state+event transition, concurrent writes)
-Known limitations/blockers: docs/BUILD_GUIDE.md remains absent; Ollama and Docker services were not active; chat engine, agent loop, and task queues remain deferred to subsequent steps.
-Next step: Step 06
+- pnpm lint (code 0; clean ESLint run across all packages)
+- pnpm typecheck (code 0; strict composite build verified)
+- pnpm test (code 0; 8 test suites, 43/43 tests passed)
+  - apps/server/test/security.test.ts (17 passed)
+  - apps/server/test/health.test.ts (3 passed)
+  - packages/core/test/core.test.ts (8 passed)
+  - packages/db/test/persistence.test.ts (9 passed)
+  - packages/db/test/db.test.ts (1 passed)
+  - packages/providers/test/provider.test.ts (1 passed)
+  - apps/worker/test/worker.test.ts (3 passed)
+  - apps/web/test/app.test.tsx (1 passed)
+- pnpm build (code 0; all packages and apps compiled cleanly)
+- pnpm check (code 0; composite gate verified)
+Known limitations/blockers: docs/BUILD_GUIDE.md remains absent; Ollama and Docker local services were not running; task scheduling and tool execution remain deferred to subsequent steps.
+Next step: Step 07
 ```
 
 ## 9. Decision Log
@@ -145,5 +149,7 @@ Next step: Step 06
 | 2026-10-02 | Establish pnpm monorepo with apps/ (web, server, worker) and packages/ (core, db, providers) using strict TypeScript and LibSQL driver for Drizzle. | Step 04 runnable scaffold; cross-platform driver compatibility on Node 26. | Adopted |
 | 2026-10-02 | Adopt Persistent Git / GitHub Rule: every completed step requires focused commit, verification, push to origin, and structured report. | User instruction; repository traceability and synchronization. | Adopted |
 | 2026-10-03 | Enforce strict relational schema with sequence numbers for message/event ordering, non-destructive migrations, atomic state+event batches, and SQLite safety pragmas (FK, WAL, busy_timeout). | Step 05 durable storage and migrations specification. | Adopted |
+| 2026-10-03 | Enforce loopback-only binding, single-owner pairing flow with 15m expiry/max 5 attempts, HttpOnly SameSite=Strict session cookies, Host & Origin gatekeeping, 1MB body limit, workspace scoping checks, and AES-256-GCM encrypted provider credentials. | Step 06 local access and credential protection specification. | Adopted |
 
 Future decisions should include the date, the concrete decision, its evidence or rationale, and its current status. Update this memory after each numbered step with only behavior that has actually been verified.
+

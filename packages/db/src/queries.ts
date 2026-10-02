@@ -1,5 +1,13 @@
 import type { Client } from "@libsql/client";
-import { type Run, type InsertMessage, type Message, type RunEvent, type InsertRunEvent } from "./schema.js";
+import {
+  type Run,
+  type InsertMessage,
+  type Message,
+  type RunEvent,
+  type InsertRunEvent,
+  type ProviderCredential,
+  type InsertProviderCredential
+} from "./schema.js";
 
 /**
  * Retrieves conversation messages deterministically ordered by sequence number and timestamp.
@@ -139,3 +147,109 @@ export async function withLockRetry<T>(
     }
   }
 }
+
+/**
+ * Verifies that a resource exists and belongs strictly to the given workspace.
+ */
+export async function verifyWorkspaceScope(
+  client: Client,
+  resourceType: "conversation" | "run" | "message",
+  resourceId: string,
+  workspaceId: string
+): Promise<boolean> {
+  if (resourceType === "conversation") {
+    const res = await client.execute({
+      sql: "SELECT id FROM conversations WHERE id = ? AND workspace_id = ?;",
+      args: [resourceId, workspaceId]
+    });
+    return res.rows.length > 0;
+  }
+
+  if (resourceType === "run") {
+    const res = await client.execute({
+      sql: "SELECT id FROM runs WHERE id = ? AND workspace_id = ?;",
+      args: [resourceId, workspaceId]
+    });
+    return res.rows.length > 0;
+  }
+
+  if (resourceType === "message") {
+    const res = await client.execute({
+      sql: `SELECT m.id FROM messages m
+            JOIN conversations c ON m.conversation_id = c.id
+            WHERE m.id = ? AND c.workspace_id = ?;`,
+      args: [resourceId, workspaceId]
+    });
+    return res.rows.length > 0;
+  }
+
+  return false;
+}
+
+/**
+ * Inserts or replaces a provider credential.
+ */
+export async function insertProviderCredential(
+  client: Client,
+  cred: InsertProviderCredential
+): Promise<void> {
+  await client.execute({
+    sql: `INSERT OR REPLACE INTO provider_credentials (id, provider_id, name, masked_value, encrypted_value, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?);`,
+    args: [
+      cred.id,
+      cred.providerId,
+      cred.name,
+      cred.maskedValue,
+      cred.encryptedValue,
+      cred.createdAt,
+      cred.updatedAt
+    ]
+  });
+}
+
+/**
+ * Lists all provider credentials metadata without ever returning the encrypted or raw secrets.
+ */
+export async function listProviderCredentials(
+  client: Client
+): Promise<Omit<ProviderCredential, "encryptedValue">[]> {
+  const res = await client.execute(
+    "SELECT id, provider_id, name, masked_value, created_at, updated_at FROM provider_credentials ORDER BY created_at ASC;"
+  );
+  return res.rows.map((row) => ({
+    id: String(row["id"]),
+    providerId: String(row["provider_id"]),
+    name: String(row["name"]),
+    maskedValue: String(row["masked_value"]),
+    createdAt: String(row["created_at"]),
+    updatedAt: String(row["updated_at"])
+  }));
+}
+
+/**
+ * Retrieves an encrypted provider credential for internal runtime decryption only.
+ */
+export async function getProviderCredentialEncrypted(
+  client: Client,
+  id: string
+): Promise<ProviderCredential | null> {
+  const res = await client.execute({
+    sql: "SELECT * FROM provider_credentials WHERE id = ?;",
+    args: [id]
+  });
+  if (res.rows.length === 0) {
+    return null;
+  }
+  const row = res.rows[0];
+  return {
+    id: String(row["id"]),
+    providerId: String(row["provider_id"]),
+    name: String(row["name"]),
+    maskedValue: String(row["masked_value"]),
+    encryptedValue: String(row["encrypted_value"]),
+    createdAt: String(row["created_at"]),
+    updatedAt: String(row["updated_at"])
+  };
+}
+

@@ -84,6 +84,21 @@ export const MIGRATIONS: Migration[] = [
       `CREATE UNIQUE INDEX IF NOT EXISTS idx_run_events_run_seq ON run_events(run_id, sequence_number);`,
       `CREATE INDEX IF NOT EXISTS idx_run_events_created ON run_events(created_at);`
     ]
+  },
+  {
+    version: 2,
+    name: "0002_provider_credentials",
+    sql: [
+      `CREATE TABLE IF NOT EXISTS provider_credentials (
+        id TEXT PRIMARY KEY,
+        provider_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        masked_value TEXT NOT NULL,
+        encrypted_value TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );`
+    ]
   }
 ];
 

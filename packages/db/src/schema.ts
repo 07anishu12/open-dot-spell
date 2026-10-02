@@ -91,6 +91,16 @@ export const runEvents = sqliteTable(
   ]
 );
 
+export const providerCredentials = sqliteTable("provider_credentials", {
+  id: text("id").primaryKey(),
+  providerId: text("provider_id").notNull(),
+  name: text("name").notNull(),
+  maskedValue: text("masked_value").notNull(),
+  encryptedValue: text("encrypted_value").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull()
+});
+
 export type Workspace = typeof workspaces.$inferSelect;
 export type InsertWorkspace = typeof workspaces.$inferInsert;
 
@@ -105,3 +115,7 @@ export type InsertRun = typeof runs.$inferInsert;
 
 export type RunEvent = typeof runEvents.$inferSelect;
 export type InsertRunEvent = typeof runEvents.$inferInsert;
+
+export type ProviderCredential = typeof providerCredentials.$inferSelect;
+export type InsertProviderCredential = typeof providerCredentials.$inferInsert;
+

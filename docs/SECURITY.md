@@ -52,51 +52,63 @@ A large language model generates statistical completions based on user prompts a
 
 ---
 
-## 3. Local API Security and Session Protection
+## 3. Local API Security and Session Protection (Implemented & Verified in Step 06)
 
 To protect the local HTTP API from cross-site request forgery (CSRF), cross-origin information leakage, and DNS rebinding:
 
-### 1. Loopback Binding
-- The API server binds strictly to `127.0.0.1` (IPv4) or `::1` (IPv6). Binding to `0.0.0.0` is strictly forbidden.
+### 1. Loopback Binding Enforcement
+- The API server strictly binds to loopback (`127.0.0.1` or `::1`).
+- Binding to `0.0.0.0` or external network interfaces is prohibited at startup and fails with a fatal exit code (`process.exit(1)`).
+- Open Dot Spell is documented and enforced as a laptop-local application, not a remotely accessible service.
 
-### 2. Owner Session Authentication
-- Upon startup, the backend generates a cryptographically secure random session token (32 bytes, hex-encoded).
-- The token is stored in the local user data directory with restrictive file permissions (`chmod 0600 ~/.opendotspell/session.token`).
-- All API requests (except static UI asset serving) must provide this token via the custom header:
-  ```http
-  X-OpenDotSpell-Session: <token>
-  ```
-- Browser cookies are avoided for API authorization to eliminate ambient credential vulnerabilities.
+### 2. Single-Owner Pairing and Session Lifecycle
+- Upon launch, the application generates a cryptographically secure random pairing secret (32 bytes entropy, 64-character hex string).
+- The pairing secret is displayed **only** to local terminal `stdout` on server launch. It is never exposed over an HTTP endpoint or stored unencrypted in repository files.
+- **Pairing Constraints:**
+  - One-time consumption: successfully pairing invalidates the secret immediately to prevent replay attacks.
+  - Expiry: valid for 15 minutes from generation.
+  - Brute-force protection: limited to 5 attempts; exceeding 5 attempts locks the pairing endpoint.
+- **Session Tokens & Cookies:**
+  - Successful pairing generates a 32-byte cryptographically secure session token (24-hour TTL).
+  - Browser clients receive an `HttpOnly`, `SameSite=Strict`, `Path=/` session cookie (`opendotspell_session`).
+  - API and CLI clients can authenticate using either the `X-OpenDotSpell-Session: <token>` header or `Authorization: Bearer <token>`.
+  - The `POST /api/auth/logout` endpoint revokes the active session token and clears the browser cookie.
 
 ### 3. Host and Origin Validation
-- **Host Header Check:** The server validates the HTTP `Host` header against an allowlist: `127.0.0.1:<PORT>` and `localhost:<PORT>`. Requests with unexpected or missing `Host` headers are rejected with HTTP 403 Forbidden.
-- **Origin Header Check:** For all state-mutating requests (`POST`, `PUT`, `DELETE`), the `Origin` header must match the expected local origin `http://127.0.0.1:<PORT>` or `http://localhost:<PORT>`.
-- Cross-Origin Resource Sharing (CORS) is disabled for external origins. No wildcard (`*`) origins are ever permitted.
+- **Host Header Check:** The server validates the HTTP `Host` header on all incoming requests against loopback addresses (`127.0.0.1`, `localhost`, `::1`, and `[::1]:<port>`). Requests with missing or non-loopback host headers are rejected with `HTTP 403 Forbidden` to mitigate DNS rebinding.
+- **Origin Header Check:** For all state-mutating requests (`POST`, `PUT`, `DELETE`, `PATCH`), the `Origin` header (if provided) is verified to originate strictly from a loopback address. Cross-origin requests from external web contexts (e.g., `http://malicious-website.com`) are rejected with `HTTP 403 Forbidden`.
+- **CORS Allowlist:** Strictly configured for local development origins (`http://127.0.0.1:5173`, `http://localhost:5173`, `http://127.0.0.1:3000`). Wildcard origins (`*`) are disallowed.
+
+### 4. Request and Response Hardening
+- **Payload Size Ceiling:** Fastify enforces a strict 1 MB body limit (`bodyLimit: 1048576`). Payloads exceeding this limit are immediately rejected with `HTTP 413 Payload Too Large`.
+- **Security Headers:** Every HTTP response includes:
+  - `X-Content-Type-Options: nosniff`
+  - `X-Frame-Options: DENY`
+  - `Referrer-Policy: strict-origin-when-cross-origin`
+  - `Content-Security-Policy: default-src 'self'`
 
 ---
 
-## 4. Credential Isolation and Secret Handling
+## 4. Credential Isolation and Secret Handling (Implemented & Verified in Step 06)
 
 1. **Client Isolation:** The browser client is an untrusted presentation layer. It must **never** receive:
-   - Inference API keys or remote tokens.
-   - Database connection strings or file system paths.
+   - Inference API keys or remote tokens in plaintext.
+   - Database connection strings or host filesystem paths.
    - Docker daemon sockets or administrative tokens.
    - Raw credentials from host configuration files.
-2. **Path Masking and Secret Filtering:**
-   - The tool dispatcher and workspace reader automatically filter and deny access to sensitive files using built-in globs:
-     ```text
-     **/.env*
-     **/*.pem
-     **/*.key
-     **/*id_rsa*
-     **/*id_ed25519*
-     ~/.ssh/**
-     ~/.gnupg/**
-     ~/.aws/**
-     ```
-   - If an assistant tool attempts to read a file matching these patterns, the request is rejected immediately by the policy engine.
-3. **Redaction in Event Logs:**
-   - Values matching known configured API tokens are automatically scrubbed and replaced with `[REDACTED]` before events are written to the database ledger or streamed to the client UI.
+2. **Encrypted Provider Credential Store:**
+   - Raw credentials are encrypted at rest using platform primitives (`node:crypto` AES-256-GCM with a 12-byte random IV and 16-byte authentication tag).
+   - Master key is derived using SHA-256 from a local machine seed or environment variable (`OPEN_DOT_SPELL_MASTER_KEY`).
+   - Credential references (ID, provider ID, name, masked preview, timestamps) are stored in SQLite and can be listed via `GET /api/credentials`.
+   - Raw secrets and encrypted ciphertext blobs are strictly scrubbed and never returned in API responses.
+   - Previews are masked (e.g. `sk-...abcd` or `...1234`).
+3. **Local-Only Inference Mode:**
+   - Local inference (Ollama) works out-of-the-box with zero remote credentials stored.
+   - Remote credentials are strictly opt-in.
+4. **Structured Log Redaction:**
+   - Structured logging and error serialization recursively scrubs known sensitive keys (`token`, `secret`, `password`, `authorization`, `cookie`, `apiKey`, `key`, `pairingSecret`).
+   - Bearer token strings are replaced with `Bearer [REDACTED]`.
+   - Error handlers sanitize error messages before returning HTTP responses.
 
 ---
 
@@ -204,3 +216,33 @@ Before any implementation step is committed, verify that:
 - [ ] No model response can mark a task as completed without verified evidence.
 - [ ] No credential or secret file is readable by an assistant tool.
 - [ ] No pending approval can be consumed with modified parameters.
+
+---
+
+## 10. Local Threat Model and Residual Risks (Documented in Step 06)
+
+To avoid security theater, Open Dot Spell is explicit about what its local security boundary protects against and what remains outside its threat model on a single-user workstation.
+
+### What the Local Security Boundary Protects Against
+
+1. **Malicious Web Browser Tabs (Drive-By Attacks):**
+   - Web browsers running concurrently with Open Dot Spell cannot invoke state-mutating API actions because of strict `Origin` validation, loopback CORS isolation, and `SameSite=Strict` cookies.
+2. **DNS Rebinding Attacks:**
+   - External domains resolving to `127.0.0.1` cannot interact with the local API because the HTTP `Host` header is strictly verified against loopback host names.
+3. **Cross-Workspace Data Leakage:**
+   - Assistant tasks, conversations, and runs are strictly scoped to the workspace ID. Forging resource identifiers across workspaces fails cleanly with `404 Not Found`.
+4. **Denial of Service via Giant Payloads:**
+   - Fastify limits body payloads to 1 MB, rejecting oversized requests with HTTP 413.
+5. **Secret and Key Exfiltration via Logs and API Responses:**
+   - Recursive structured log redaction ensures credentials, tokens, and authorization headers never leak to logs, error responses, or telemetry.
+   - Provider credentials are encrypted at rest with AES-256-GCM; listing endpoints expose only masked previews.
+
+### What is Outside the Single-User Local Threat Model
+
+1. **Malicious Processes Running with the User's OS Privileges:**
+   - If untrusted malware is already executing as the local desktop user or root, it can inspect process memory, read unencrypted user files, or access the SQLite database directly on disk. Localhost API authentication cannot defend against a compromised operating system user account.
+2. **Physical Device Compromise:**
+   - Open Dot Spell does not implement full-disk encryption or hardware security enclave bindings; it relies on the operating system's full disk encryption (e.g. FileVault / LUKS).
+3. **Multi-User Host Separation:**
+   - Open Dot Spell is a single-owner application. It does not provide multi-tenant Unix isolation between different local user accounts beyond standard POSIX file permissions (`0600`).
+

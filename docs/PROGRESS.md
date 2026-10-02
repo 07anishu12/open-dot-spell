@@ -240,7 +240,70 @@ Implement the durable local SQLite persistence layer using the agreed Drizzle OR
 
 ### Next step
 
-Step 06. Do not begin it until the next numbered prompt is supplied.
+Step 06.
+
+## Step 06 — Protect Local Access and Credentials
+
+**Status:** Implementation complete and verified. Local owner authentication, loopback binding, request hardening, workspace isolation, structured log redaction, and encrypted credential storage operational.
+
+### Objective
+
+Establish the security perimeter for Open Dot Spell before exposing privileged assistant actions: enforce strict loopback binding, implement a single-owner bootstrap pairing model with one-time secrets and attempt limits, establish authenticated sessions via HttpOnly cookies and auth headers, implement Host and Origin header gatekeeping to block DNS rebinding and cross-site requests, enforce a 1 MB request size limit, ensure workspace resource authorization, implement recursive structured log redaction, provide AES-256-GCM encrypted provider credential storage with masked previews, and verify all controls through automated security tests.
+
+### Files changed
+
+- `packages/core/src/index.ts` — auth & credential Zod schemas (`PairingRequestSchema`, `PairingResponseSchema`, `AuthStatusSchema`, `CredentialReferenceSchema`, `StoreCredentialSchema`), masking utility (`maskSecret`), recursive log redaction utility (`redactSensitiveData`), AES-256-GCM encryption/decryption (`encryptSecret`, `decryptSecret`), and key derivation (`deriveMasterKey`).
+- `packages/core/test/core.test.ts` — test suite for masking, redaction, and AES-256-GCM authenticated encryption/decryption with tampering detection.
+- `packages/db/src/schema.ts` — added `provider_credentials` SQLite table schema.
+- `packages/db/src/migrations.ts` — added migration version 2 (`0002_provider_credentials`).
+- `packages/db/src/queries.ts` — implemented `verifyWorkspaceScope`, `insertProviderCredential`, `listProviderCredentials` (returning metadata and masked preview only), and `getProviderCredentialEncrypted`.
+- `packages/db/test/persistence.test.ts` — updated integration test suite to verify version 2 migrations, workspace scoping isolation, and credential metadata storage.
+- `apps/server/src/auth.ts` — created `AuthManager` with one-time 32-byte pairing secret (15m expiry, 5 max attempts, replay prevention) and 32-byte session token lifecycle.
+- `apps/server/src/app.ts` — integrated `@fastify/cookie`, security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, CSP), loopback Host header check, Origin header check on mutating methods, 1 MB body limit, `requireOwnerAuth` preHandler, redacted error handler, pairing endpoint (`POST /api/auth/pair`), status endpoint (`GET /api/auth/status`), logout endpoint (`POST /api/auth/logout`), workspace scoping endpoints, masked credential endpoints (`GET/POST /api/credentials`), and local Ollama provider endpoint.
+- `apps/server/src/index.ts` — enforced strict rejection of non-loopback bindings (`0.0.0.0`) on launch, initialized `AuthManager`, and printed one-time pairing code to terminal `stdout`.
+- `apps/server/test/security.test.ts` — comprehensive 17-test automated security suite covering loopback host check, DNS rebinding rejection, pairing lifecycle, attempt limits, replay protection, HttpOnly cookies, logout, untrusted origin rejection, loopback origin allowance, 1 MB payload rejection (413), security headers, cross-workspace resource access rejection (404), credential encryption & masking, and local inference without remote credentials.
+- `docs/SECURITY.md` — updated Section 3 (Local API Security), Section 4 (Credential Isolation), and added Section 10 (Local Threat Model and Residual Risks).
+- `docs/ARCHITECTURE.md` — updated Section 11 with auth and credential endpoints.
+- `docs/PROJECT_MEMORY.md` — recorded Step 06 progress and decision log entry.
+- `docs/PROGRESS.md` — this Step 06 record.
+
+### Verification commands and actual outcomes
+
+1. `pnpm check` (Composite project-wide gate) — Exit code 0.
+   - `pnpm lint` — Exit code 0. 0 errors, 0 warnings across all 7 packages.
+   - `pnpm typecheck` — Exit code 0. Strict TypeScript composite build passed without error.
+   - `pnpm test` — Exit code 0. 8 test suites, 43/43 tests passing:
+     - `apps/server/test/security.test.ts` (17 passed)
+     - `apps/server/test/health.test.ts` (3 passed)
+     - `packages/core/test/core.test.ts` (8 passed)
+     - `packages/db/test/persistence.test.ts` (9 passed)
+     - `packages/db/test/db.test.ts` (1 passed)
+     - `packages/providers/test/provider.test.ts` (1 passed)
+     - `apps/worker/test/worker.test.ts` (3 passed)
+     - `apps/web/test/app.test.tsx` (1 passed)
+   - `pnpm build` — Exit code 0. All packages and Vite client built cleanly in 0.9s.
+
+### Manual verification
+
+- Confirmed server startup refuses non-loopback hosts (`0.0.0.0`) with fatal error exit code 1.
+- Confirmed terminal stdout securely displays pairing secret with 15-minute expiration notice.
+- Confirmed single-owner pairing secret cannot be replayed or brute-forced.
+- Confirmed cross-origin requests from external web contexts are rejected (`403 Forbidden`).
+- Confirmed requests exceeding 1 MB are rejected (`413 Payload Too Large`).
+- Confirmed cross-workspace resource queries return `404 Not Found`.
+- Confirmed credentials API never leaks plaintext secret values or encrypted ciphertext.
+- Confirmed local inference (Ollama) operates with zero remote credentials stored.
+
+### Known limitations/blockers
+
+- `docs/BUILD_GUIDE.md` remains absent from the repository.
+- Ollama and Docker local background services were not running during this step.
+- Single-user local threat model assumes the local host operating system account is trusted.
+
+### Next step
+
+Step 07. Do not begin it until the next numbered prompt is supplied.
+
 
 
 

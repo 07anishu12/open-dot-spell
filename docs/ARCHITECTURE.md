@@ -472,6 +472,39 @@ All endpoints run on `http://127.0.0.1:<PORT>` and require the `X-OpenDotSpell-S
     }
     ```
 
+### 1b. Single-Owner Authentication & Session Lifecycle (Step 06)
+- **GET `/api/auth/status`**
+  - **Purpose:** Retrieve local pairing and authentication status.
+  - **Response (200 OK):** `{"paired": true, "authenticated": true}`
+- **POST `/api/auth/pair`**
+  - **Purpose:** Pair local client using one-time terminal pairing code.
+  - **Request:** `{"pairingSecret": "hex_secret_here"}`
+  - **Response (200 OK):** `{"token": "session_token_here", "expiresIn": 86400}` (and sets `opendotspell_session` HttpOnly cookie)
+- **POST `/api/auth/logout`**
+  - **Purpose:** Invalidate session token and clear browser cookie.
+  - **Response (200 OK):** `{"success": true}`
+
+### 1c. Provider Credentials Management (Step 06)
+- **GET `/api/credentials`**
+  - **Purpose:** List configured provider credentials (metadata and masked previews only).
+  - **Response (200 OK):**
+    ```json
+    [
+      {
+        "id": "cred_123",
+        "providerId": "anthropic",
+        "name": "Work Key",
+        "maskedValue": "sk-...wxyz",
+        "createdAt": "...",
+        "updatedAt": "..."
+      }
+    ]
+    ```
+- **POST `/api/credentials`**
+  - **Purpose:** Encrypt at rest and store a provider credential. Raw secret is never logged or returned.
+  - **Request:** `{"providerId": "anthropic", "name": "Work Key", "secret": "sk-ant-..."}`
+  - **Response (201 Created):** `{"id": "cred_123", "providerId": "anthropic", "name": "Work Key", "maskedValue": "sk-...wxyz"}`
+
 ### 2. Provider Management
 - **GET `/api/providers`**
   - **Purpose:** List configured model runtimes and discovered capabilities.

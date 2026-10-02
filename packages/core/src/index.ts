@@ -85,3 +85,133 @@ export function computeActionFingerprint(
   const payload = `${toolName}\n${canonicalJson}\n${targetResource}`;
   return createHash("sha256").update(payload).digest("hex");
 }
+
+// ==========================================
+// Authentication & Security Schemas
+// ==========================================
+
+export const PairingRequestSchema = z.object({
+  pairingSecret: z.string().min(1, "Pairing secret is required")
+});
+export type PairingRequest = z.infer<typeof PairingRequestSchema>;
+
+export const PairingResponseSchema = z.object({
+  token: z.string(),
+  expiresIn: z.number()
+});
+export type PairingResponse = z.infer<typeof PairingResponseSchema>;
+
+export const AuthStatusSchema = z.object({
+  paired: z.boolean(),
+  authenticated: z.boolean()
+});
+export type AuthStatus = z.infer<typeof AuthStatusSchema>;
+
+export const CredentialReferenceSchema = z.object({
+  id: z.string(),
+  providerId: z.string(),
+  name: z.string(),
+  maskedValue: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+export type CredentialReference = z.infer<typeof CredentialReferenceSchema>;
+
+export const StoreCredentialSchema = z.object({
+  providerId: z.string().min(1, "Provider ID is required"),
+  name: z.string().min(1, "Name is required"),
+  secret: z.string().min(1, "Secret value is required")
+});
+export type StoreCredential = z.infer<typeof StoreCredentialSchema>;
+
+// ==========================================
+// Secret Masking & Redaction Utilities
+// ==========================================
+
+export function maskSecret(secret: string): string {
+  if (!secret || secret.length <= 4) {
+    return "****";
+  }
+  if (secret.startsWith("sk-")) {
+    return `sk-...${secret.slice(-4)}`;
+  }
+  return `...${secret.slice(-4)}`;
+}
+
+const SENSITIVE_KEY_REGEX = /^(token|secret|password|authorization|cookie|apikey|key|pairingsecret|x-opendotspell-session)$/i;
+
+/**
+ * Recursively redacts sensitive fields (passwords, tokens, keys, authorization headers)
+ * from objects, arrays, and strings before logging or serialization.
+ */
+export function redactSensitiveData(data: unknown): unknown {
+  if (data === null || data === undefined) {
+    return data;
+  }
+  if (typeof data === "string") {
+    if (/^Bearer\s+[A-Za-z0-9\-._~+/]+=*/i.test(data)) {
+      return "Bearer [REDACTED]";
+    }
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data.map(redactSensitiveData);
+  }
+  if (typeof data === "object") {
+    const redacted: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+      if (SENSITIVE_KEY_REGEX.test(key)) {
+        redacted[key] = "[REDACTED]";
+      } else {
+        redacted[key] = redactSensitiveData(value);
+      }
+    }
+    return redacted;
+  }
+  return data;
+}
+
+// ==========================================
+// Cryptographic Secret Protection (AES-256-GCM)
+// ==========================================
+
+import { randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
+
+export interface EncryptedPayload {
+  ciphertext: string;
+  iv: string;
+  tag: string;
+}
+
+export function deriveMasterKey(secretOrSeed: string): Buffer {
+  return createHash("sha256").update(secretOrSeed).digest();
+}
+
+export function encryptSecret(plainText: string, key: Buffer): EncryptedPayload {
+  if (key.length !== 32) {
+    throw new Error("Master encryption key must be 32 bytes for AES-256-GCM");
+  }
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  let ciphertext = cipher.update(plainText, "utf8", "hex");
+  ciphertext += cipher.final("hex");
+  const tag = cipher.getAuthTag().toString("hex");
+
+  return {
+    ciphertext,
+    iv: iv.toString("hex"),
+    tag
+  };
+}
+
+export function decryptSecret(payload: EncryptedPayload, key: Buffer): string {
+  if (key.length !== 32) {
+    throw new Error("Master encryption key must be 32 bytes for AES-256-GCM");
+  }
+  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(payload.iv, "hex"));
+  decipher.setAuthTag(Buffer.from(payload.tag, "hex"));
+  let plainText = decipher.update(payload.ciphertext, "hex", "utf8");
+  plainText += decipher.final("utf8");
+  return plainText;
+}
+

@@ -14,7 +14,11 @@ import {
   workspaces,
   conversations,
   runs,
-  withLockRetry
+  withLockRetry,
+  verifyWorkspaceScope,
+  insertProviderCredential,
+  listProviderCredentials,
+  getProviderCredentialEncrypted
 } from "../src/index.js";
 
 describe("Persistence Layer Integration Tests", () => {
@@ -45,7 +49,7 @@ describe("Persistence Layer Integration Tests", () => {
 
     // Run migrations
     const res = await runMigrations(client);
-    expect(res.appliedCount).toBe(1);
+    expect(res.appliedCount).toBe(2);
 
     // Verify tables exist
     const afterTables = await client.execute(
@@ -58,9 +62,10 @@ describe("Persistence Layer Integration Tests", () => {
     expect(tableNames).toContain("messages");
     expect(tableNames).toContain("runs");
     expect(tableNames).toContain("run_events");
+    expect(tableNames).toContain("provider_credentials");
 
     const versions = await getAppliedMigrationVersions(client);
-    expect(versions).toEqual([1]);
+    expect(versions).toEqual([1, 2]);
 
     await close();
   });
@@ -73,7 +78,7 @@ describe("Persistence Layer Integration Tests", () => {
     expect(res.appliedCount).toBe(0);
 
     const versions = await getAppliedMigrationVersions(client);
-    expect(versions).toEqual([1]);
+    expect(versions).toEqual([1, 2]);
 
     await close();
   });
@@ -217,8 +222,8 @@ describe("Persistence Layer Integration Tests", () => {
     // Define a failing migration (invalid SQL syntax)
     const badMigration = [
       {
-        version: 2,
-        name: "0002_broken_migration",
+        version: 999,
+        name: "0999_broken_migration",
         sql: ["CREATE BROKEN TABLE syntax_error;"]
       }
     ];
@@ -230,9 +235,9 @@ describe("Persistence Layer Integration Tests", () => {
     expect(ws.rows).toHaveLength(1);
     expect(ws.rows[0]?.["id"]).toBe("ws_preserve");
 
-    // Verify migration version 2 was not marked applied
+    // Verify migration version 999 was not marked applied
     const versions = await getAppliedMigrationVersions(client);
-    expect(versions).toEqual([1]);
+    expect(versions).toEqual([1, 2]);
 
     await close();
   });
@@ -349,4 +354,106 @@ describe("Persistence Layer Integration Tests", () => {
 
     await close();
   });
+
+  it("8. Workspace scoping checks: verifyWorkspaceScope strictly isolates resources to their workspace", async () => {
+    const { client, db, close } = await createDatabaseClient({ dbPath: dbFile, autoMigrate: true });
+    const now = new Date().toISOString();
+
+    // Create 2 workspaces
+    await db.insert(workspaces).values([
+      {
+        id: "ws_alpha",
+        name: "Workspace Alpha",
+        rootPath: "/tmp/alpha",
+        allowedGlobs: "[]",
+        deniedGlobs: "[]",
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: "ws_beta",
+        name: "Workspace Beta",
+        rootPath: "/tmp/beta",
+        allowedGlobs: "[]",
+        deniedGlobs: "[]",
+        createdAt: now,
+        updatedAt: now
+      }
+    ]);
+
+    // Create conversation in ws_alpha
+    await db.insert(conversations).values({
+      id: "conv_alpha_1",
+      workspaceId: "ws_alpha",
+      title: "Alpha Conversation",
+      modelId: "llama3",
+      providerId: "prov_ollama_local",
+      createdAt: now,
+      updatedAt: now
+    });
+
+    // Create run in ws_alpha
+    await db.insert(runs).values({
+      id: "run_alpha_1",
+      workspaceId: "ws_alpha",
+      conversationId: "conv_alpha_1",
+      status: "running",
+      startedAt: now
+    });
+
+    // Create message in conv_alpha_1
+    await insertMessage(client, {
+      id: "msg_alpha_1",
+      conversationId: "conv_alpha_1",
+      sequenceNumber: 1,
+      role: "user",
+      content: "Hello from alpha",
+      createdAt: now
+    });
+
+    // Verify valid scoping queries return true
+    expect(await verifyWorkspaceScope(client, "conversation", "conv_alpha_1", "ws_alpha")).toBe(true);
+    expect(await verifyWorkspaceScope(client, "run", "run_alpha_1", "ws_alpha")).toBe(true);
+    expect(await verifyWorkspaceScope(client, "message", "msg_alpha_1", "ws_alpha")).toBe(true);
+
+    // Verify cross-workspace queries return false
+    expect(await verifyWorkspaceScope(client, "conversation", "conv_alpha_1", "ws_beta")).toBe(false);
+    expect(await verifyWorkspaceScope(client, "run", "run_alpha_1", "ws_beta")).toBe(false);
+    expect(await verifyWorkspaceScope(client, "message", "msg_alpha_1", "ws_beta")).toBe(false);
+
+    // Verify non-existent resources return false
+    expect(await verifyWorkspaceScope(client, "conversation", "conv_nonexistent", "ws_alpha")).toBe(false);
+
+    await close();
+  });
+
+  it("9. Provider credentials: store encrypted credential and list without secret exposure", async () => {
+    const { client, close } = await createDatabaseClient({ dbPath: dbFile, autoMigrate: true });
+    const now = new Date().toISOString();
+
+    await insertProviderCredential(client, {
+      id: "cred_anthropic_1",
+      providerId: "anthropic",
+      name: "Work Anthropic Key",
+      maskedValue: "sk-ant-...wxyz",
+      encryptedValue: '{"ciphertext":"aabbcc","iv":"1122","tag":"3344"}',
+      createdAt: now,
+      updatedAt: now
+    });
+
+    // List credentials: must NEVER expose encryptedValue or raw secrets
+    const list = await listProviderCredentials(client);
+    expect(list).toHaveLength(1);
+    expect(list[0]?.id).toBe("cred_anthropic_1");
+    expect(list[0]?.maskedValue).toBe("sk-ant-...wxyz");
+    expect("encryptedValue" in (list[0] ?? {})).toBe(false);
+
+    // Internal fetch for runtime decryption: includes encryptedValue
+    const internal = await getProviderCredentialEncrypted(client, "cred_anthropic_1");
+    expect(internal).not.toBeNull();
+    expect(internal?.encryptedValue).toBe('{"ciphertext":"aabbcc","iv":"1122","tag":"3344"}');
+
+    await close();
+  });
 });
+
