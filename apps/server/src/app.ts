@@ -12,7 +12,9 @@ import {
   maskSecret,
   encryptSecret,
   deriveMasterKey,
-  redactSensitiveData
+  redactSensitiveData,
+  ToolRegistry,
+  createDefaultToolRegistry
 } from "@open-dot-spell/core";
 import {
   type DatabaseInstance,
@@ -30,6 +32,7 @@ import {
 import { OllamaProviderStub, OllamaProvider, type ModelProviderAdapter } from "@open-dot-spell/providers";
 import { WorkerProcess } from "@open-dot-spell/worker";
 import { AuthManager } from "./auth.js";
+import { ToolDispatcher, createDatabaseToolPersistence } from "./tools/dispatcher.js";
 
 export { AuthManager };
 
@@ -44,12 +47,24 @@ export interface AppOptions {
   eventBus?: RunEventBus;
   sseHeartbeatMs?: number;
   provider?: ModelProviderAdapter;
+  toolRegistry?: ToolRegistry;
+  toolDispatcher?: ToolDispatcher;
 }
 
 export function buildApp(options: AppOptions = {}): FastifyInstance {
   const authManager = options.authManager ?? new AuthManager();
   const masterKey = options.masterKey ?? deriveMasterKey("open-dot-spell-local-master-key-seed");
   const eventBus = options.eventBus ?? new RunEventBus();
+  const toolRegistry = options.toolRegistry ?? createDefaultToolRegistry();
+  const toolDispatcher =
+    options.toolDispatcher ??
+    (options.db
+      ? new ToolDispatcher({
+          registry: toolRegistry,
+          persistence: createDatabaseToolPersistence(options.db),
+          eventBus
+        })
+      : undefined);
 
   const app = Fastify({
     logger: false,
@@ -766,6 +781,84 @@ export function buildApp(options: AppOptions = {}): FastifyInstance {
           error: message
         });
       }
+    }
+  );
+
+  // Protected tool dispatch endpoint: single entry point for typed tool execution
+  app.post<{
+    Params: { workspaceId: string; runId: string };
+    Body: {
+      toolCallId?: string;
+      callId?: string;
+      toolName?: string;
+      toolVersion?: string;
+      arguments?: unknown;
+      rawArguments?: unknown;
+      targetResource?: string;
+    };
+  }>(
+    "/api/workspaces/:workspaceId/runs/:runId/tools/dispatch",
+    { preHandler: requireOwnerAuth },
+    async (request, reply) => {
+      const { workspaceId, runId } = request.params;
+      const body = request.body || {};
+      const toolCallId = body.toolCallId ?? body.callId;
+      const toolName = body.toolName;
+      const toolVersion = body.toolVersion;
+      const rawArguments = body.rawArguments !== undefined ? body.rawArguments : body.arguments;
+      const targetResource = body.targetResource;
+
+      if (!toolName || typeof toolName !== "string") {
+        return reply.code(400).send({
+          success: false,
+          toolCallId: toolCallId ?? "unknown",
+          toolName: toolName ?? "unknown",
+          error: {
+            code: "MALFORMED_ARGUMENTS",
+            message: "toolName is required and must be a string"
+          },
+          durationMs: 0
+        });
+      }
+
+      const effectiveCallId = toolCallId && typeof toolCallId === "string"
+        ? toolCallId
+        : `call_${randomBytes(8).toString("hex")}`;
+
+      if (!toolDispatcher) {
+        return reply.code(503).send({
+          success: false,
+          toolCallId: effectiveCallId,
+          toolName,
+          error: {
+            code: "PERSISTENCE_ERROR",
+            message: "Tool dispatcher not configured or database offline"
+          },
+          durationMs: 0
+        });
+      }
+
+      const result = await toolDispatcher.dispatch({
+        workspaceId,
+        runId,
+        toolCallId: effectiveCallId,
+        toolName,
+        toolVersion,
+        rawArguments,
+        targetResource
+      });
+
+      if (!result.success) {
+        if (result.error?.code === "UNAUTHORIZED_WORKSPACE") {
+          return reply.code(403).send(result);
+        }
+        if (result.error?.code === "INVALID_RUN_SCOPE" || result.error?.code === "UNKNOWN_TOOL") {
+          return reply.code(404).send(result);
+        }
+        return reply.code(400).send(result);
+      }
+
+      return reply.code(200).send(result);
     }
   );
 

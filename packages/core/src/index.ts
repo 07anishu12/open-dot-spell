@@ -1,4 +1,5 @@
 import { z } from "zod";
+export { z };
 import { createHash } from "node:crypto";
 
 export const PrivacyModeSchema = z.enum(["local_only", "hybrid", "offline"]);
@@ -275,5 +276,7 @@ export class RunEventBus {
     return this.listeners.get(runId)?.size ?? 0;
   }
 }
+
+export * from "./tools.js";
 
 

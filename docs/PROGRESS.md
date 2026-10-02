@@ -547,5 +547,64 @@ Build the initial usable interface over real backend APIs (setup/pairing flow, p
 
 ### Next step
 
-Step 11. Do not begin until the next numbered prompt is supplied.
+Step 11. Completed below.
+
+## Step 11 — Typed tools and single dispatch boundary
+
+**Status:** Implementation and verification complete.
+
+### Objective
+
+Establish a single, server-side dispatch boundary and typed tool registry for tool execution:
+1. Versioned tool definitions with input schema, output schema, risk class, required permissions, timeout, verification method, and side-effect classification.
+2. Initial safe pure tools: (1) harmless synthetic test tool (`test_echo`), (2) useful in-memory pure tool (`format_text`). Neither tool accesses filesystem or network.
+3. Server-side dispatch boundary (`ToolDispatcher`): resolves registered tools, treats model JSON as untrusted input with strict schema parsing, authorizes workspace and active run scope, enforces execution timeouts and output size budgets (64 KB limit), verifies tool output against output schemas, records `tool_call_prepared` and `tool_call_result` events in the append-only `run_events` ledger and `RunEventBus`, and returns bounded structured errors.
+4. Protected API endpoint (`POST /api/workspaces/:workspaceId/runs/:runId/tools/dispatch`) guarded by owner authentication; direct tool access routes do not exist (404).
+5. Step 11 policy enforcement: only explicitly safe pure tools (`riskClass: "pure"`, `sideEffectClassification: "none"`) are permitted; side-effecting or non-pure tools are strictly rejected before Step 12.
+
+### Files changed
+
+- `packages/core/src/tools.ts` — defined `ToolRiskClass`, `ToolVerificationMethod`, `ToolSideEffectClassification`, `ToolExecutionContext`, and `ToolDefinition<TInput, TOutput>`; implemented `testEchoTool` (`test_echo` v1.0.0) and `formatTextTool` (`format_text` v1.0.0); implemented `ToolRegistry` with version-aware lookup and `createDefaultToolRegistry`.
+- `packages/core/src/index.ts` — re-exported tool types, definitions, schemas, and `z` from zod.
+- `apps/server/src/tools/dispatcher.ts` — implemented `ToolDispatcher` with `IToolPersistence`, workspace scope and run status validation, untrusted JSON parsing, action fingerprinting via SHA-256, execution timeout race via `AbortController`, 64 KB output size enforcement, transactional event recording (`tool_call_prepared`, `tool_call_result`), and structured error classification.
+- `apps/server/src/app.ts` — integrated `ToolRegistry` and `ToolDispatcher` into `AppOptions` and `buildApp`; registered protected endpoint `POST /api/workspaces/:workspaceId/runs/:runId/tools/dispatch` with `requireOwnerAuth`.
+- `apps/server/test/tool-dispatch.test.ts` — comprehensive test suite (23 tests) covering unknown tool, malformed arguments, missing required arguments, extra/prohibited fields, invalid output schema violations, oversized output (> 64 KB), execution timeout, unauthorized workspace, invalid run scope, run terminal states, Step 11 pure tool policy rejection, event ledger recording with matching fingerprints, and single protected HTTP dispatch boundary.
+- `docs/PROGRESS.md` — this Step 11 record.
+
+### Verification commands and actual outcomes
+
+1. `pnpm check` (Composite gate) — Exit code 0.
+   - `pnpm lint` — Exit code 0. 0 errors, 0 warnings across all workspace packages.
+   - `pnpm typecheck` — Exit code 0. Strict TypeScript composite build passed across all projects.
+   - `pnpm test` — Exit code 0. 14 test suites, 124/124 tests passing:
+     - `apps/server/test/tool-dispatch.test.ts` (23 passed)
+     - `apps/server/test/conversations-stream.test.ts` (14 passed)
+     - `apps/server/test/security.test.ts` (17 passed)
+     - `apps/server/test/health.test.ts` (3 passed)
+     - `apps/web/test/app.test.tsx` (10 passed)
+     - `packages/providers/test/provider.test.ts` (18 passed)
+     - `packages/providers/test/ollama.test.ts` (8 passed)
+     - `packages/providers/test/openai-compatible.test.ts` (6 passed)
+     - `packages/providers/test/probes.test.ts` (3 passed)
+     - `packages/providers/test/live-smoke.test.ts` (1 passed — honest BLOCKED status logged)
+     - `packages/core/test/core.test.ts` (8 passed)
+     - `packages/db/test/persistence.test.ts` (9 passed)
+     - `packages/db/test/db.test.ts` (1 passed)
+     - `apps/worker/test/worker.test.ts` (3 passed)
+   - `pnpm build` — Exit code 0. All packages and Vite production bundle compiled cleanly.
+
+### Real Ollama Check Outcome
+
+- **Real Ollama Check:** `BLOCKED`
+- **Reason:** Local Ollama daemon is offline on `127.0.0.1:11434` (connection refused; `curl http://127.0.0.1:11434/api/tags` returned `OLLAMA_OFFLINE`).
+- **Reporting Compliance:** Per `AGENTS.md`, success is not fabricated when the live daemon is offline. Deterministic testing verified all interactive flows, streaming, error banners, and tool dispatch boundaries.
+
+### Known limitations/blockers
+
+- Real side-effecting tools (file system, command execution, network) are intentionally excluded and blocked until authorized in Step 12+.
+- Single-worker concurrency remains provisional (to be generalized in Step 18).
+
+### Next step
+
+Step 12. Do not begin until the next numbered prompt is supplied.
 
