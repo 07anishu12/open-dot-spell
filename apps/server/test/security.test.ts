@@ -498,7 +498,7 @@ describe("Open Dot Spell Security & Access Control Suite (Step 06)", () => {
       expect(body.providerId).toBe("prov_ollama_local");
       expect(body.isLocal).toBe(true);
       expect(body.configured).toBe(true);
-      expect(body.capabilities.supportsStreaming).toBe(true);
+      expect(body.capabilities.streaming).toBe("supported");
     });
   });
 });

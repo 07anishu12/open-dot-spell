@@ -602,41 +602,85 @@ All endpoints run on `http://127.0.0.1:<PORT>` and require the `X-OpenDotSpell-S
 
 ---
 
-## 12. Provider Streaming Event Contract and Capability Discovery
+## 12. Provider Streaming Event Contract and Capability Discovery (Implemented & Verified in Step 07)
 
-### Provider-Neutral Streaming Event Model
+### Provider-Neutral Model Adapter Contract
 
-The model provider adapter converts raw model chunks into normalized internal events:
+The core/domain layer interacts with model runtimes through a strictly provider-neutral contract:
 
 ```typescript
-type ProviderEvent =
-  | { type: "text_delta"; delta: string }
-  | { type: "tool_call_start"; tool_call_id: string; tool_name: string }
-  | { type: "tool_call_chunk"; tool_call_id: string; arguments_delta: string }
-  | { type: "tool_call_complete"; tool_call_id: string; tool_name: string; arguments: Record<string, unknown> }
-  | { type: "usage"; prompt_tokens: number; completion_tokens: number }
-  | { type: "completed"; finish_reason: "stop" | "tool_calls" | "length" | "error" }
-  | { type: "error"; code: string; message: string; fatal: boolean };
+export interface ModelProviderAdapter {
+  readonly providerId: string;
+  readonly providerType: string;
+  readonly isLocal: boolean;
+
+  checkHealth(): Promise<ProviderHealth>;
+  discoverModels(): Promise<DiscoveredModel[]>;
+  getCapabilities(modelId: string): Promise<ObservedModelCapabilities>;
+  streamChat(request: ProviderChatRequest, options?: StreamChatOptions): AsyncIterable<ProviderEvent>;
+}
 ```
 
-### Incomplete Tool Call Stream Handling
+The domain layer never imports provider-specific SDKs or binds to proprietary event types.
 
-If streaming terminates abruptly while receiving a `tool_call_chunk`:
-1. The partial JSON buffer is flagged as corrupted.
-2. The partial tool call is discarded and never dispatched to the policy engine.
-3. The event ledger records a `tool_stream_aborted` event.
-4. The worker retries the inference turn or marks the run as interrupted.
+### Normalized Streaming Event Model
 
-### Capability Discovery Contract
+Streamed responses emit normalized, immutable events that preserve exact model identifiers, tool correlation tokens, and deterministic sequence ordering:
 
-The provider layer interrogates local runtimes (e.g., via `ollama show <model>` or capability probing):
-- `supports_tools`: boolean
-- `supports_json_schema`: boolean
-- `supports_vision`: boolean
-- `context_limit`: integer
-- `supports_streaming`: boolean
+```typescript
+export type ProviderEvent =
+  | { readonly type: "text_delta"; readonly modelId: string; readonly delta: string }
+  | { readonly type: "tool_call_start"; readonly modelId: string; readonly toolCallId: string; readonly toolName: string }
+  | { readonly type: "tool_call_delta"; readonly modelId: string; readonly toolCallId: string; readonly argumentsDelta: string }
+  | { readonly type: "tool_call_complete"; readonly modelId: string; readonly toolCallId: string; readonly toolName: string; readonly arguments: Record<string, unknown>; readonly rawArguments: string }
+  | { readonly type: "usage"; readonly modelId: string; readonly promptTokens: number | null; readonly completionTokens: number | null; readonly totalTokens: number | null }
+  | { readonly type: "completed"; readonly modelId: string; readonly finishReason: "stop" | "tool_calls" | "length" | "cancelled" | "error" }
+  | { readonly type: "error"; readonly modelId: string; readonly category: ProviderErrorCategory; readonly message: string; readonly fatal: boolean; readonly rawError?: unknown };
+```
 
-Models lacking tool-calling capability will not have tool definitions injected into their prompts; they operate purely in conversational mode.
+### Safe Tool Request Assembly (`ToolCallStreamAssembler`)
+
+Provider streams deliver tool arguments incrementally in string chunks. Safe assembly is governed by `ToolCallStreamAssembler`:
+1. **Incremental Buffering:** Buffers incoming delta chunks correlated strictly by `toolCallId`.
+2. **Strict JSON Parsing:** Validates that accumulated chunks parse into a valid JSON object.
+3. **No Silent Repair:** Malformed or broken JSON emits a structured `ProviderError` with `category: "malformed_response"`. The system never attempts string heuristics or regex repairs.
+4. **Interrupted Stream Detection:** If a stream ends while a tool call is pending without a completion signal, `assertStreamComplete()` raises an `interrupted_stream` error.
+5. **No Speculative Execution:** Incomplete streams never reach the tool dispatcher or policy engine.
+
+### Usage Semantics and Integrity
+
+Token counts are represented explicitly:
+- If a provider does not supply token metrics, `promptTokens`, `completionTokens`, and `totalTokens` are returned as `null` (unknown).
+- The system **never** fabricates `0` tokens, `0` cost, or `0` latency unless explicitly measured.
+- Cost computation is strictly decoupled from token usage.
+
+### Capability Model and Model Limits
+
+Capabilities distinguish protocol support from observed model behavior:
+- **Protocol Support:** Features supported in principle by the adapter protocol.
+- **Observed Capability Record (`ObservedModelCapabilities`):** Exact verified snapshot for `providerId + modelId + runtimeVersion + probeDate`.
+- **Capability Tri-State:** Each capability (`streaming`, `toolCalling`, `structuredOutput`, `vision`, `embeddings`, `imageGeneration`) evaluates to `"supported"`, `"unsupported"`, or `"unknown"`. Unknown capabilities remain explicitly `"unknown"`.
+- **Model Limits (`ModelLimits`):** Represents `contextLimit`, `outputLimit`, and `requestTimeoutMs`. Unknown limits remain `null`.
+
+### Timeout and Error Classification
+
+All provider failures are normalized into `ProviderError` categories:
+- `authentication_failure`: Invalid or expired credentials (raw secrets scrubbed).
+- `connection_failure`: Unreachable host or socket error.
+- `timeout`: Provider response exceeded deadline.
+- `cancellation`: Stream halted via `AbortSignal`.
+- `unsupported_capability`: Model cannot fulfill requested feature (e.g. tool calling).
+- `malformed_response`: Corrupted JSON or invalid protocol payload.
+- `interrupted_stream`: Connection severed mid-generation.
+- `rate_limit`: Throttled by provider.
+- `provider_error`: Internal runtime error.
+
+### Deterministic Test Double (`SyntheticTestProvider`)
+
+Development, CI, and contract verification rely on `SyntheticTestProvider`:
+- Explicitly labeled as a synthetic fixture; never used to fabricate performance claims.
+- Selectable deterministic scenarios: `normal_text`, `valid_tool_call`, `malformed_tool_args`, `interrupted_stream`, `timeout`, `cancellation`, `missing_usage`, and `unsupported_capability`.
+- Completely reproducible without network access, live Ollama, or remote APIs.
 
 ---
 

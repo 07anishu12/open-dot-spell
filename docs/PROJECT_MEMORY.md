@@ -112,25 +112,25 @@ Models, webpages, files, MCP servers, tool descriptions, and external content ca
 ## 8. Current Progress
 
 ```text
-Step: 06
-Behavior delivered: Single-owner pairing flow, loopback binding enforcement, host/origin gatekeeping, workspace resource authorization, encrypted provider credential storage, and redacted structured logging
-Files changed: apps/server/src/app.ts, apps/server/src/auth.ts, apps/server/src/index.ts, apps/server/test/security.test.ts, packages/core/src/index.ts, packages/core/test/core.test.ts, packages/db/src/schema.ts, packages/db/src/migrations.ts, packages/db/src/queries.ts, packages/db/test/persistence.test.ts, docs/SECURITY.md, docs/ARCHITECTURE.md, docs/PROJECT_MEMORY.md, docs/PROGRESS.md
+Step: 07
+Behavior delivered: Provider-neutral streaming event contract, safe tool argument assembly, capability model distinguishing protocol from observed capabilities, explicit null usage semantics, normalized error classification, and deterministic synthetic test provider
+Files changed: packages/providers/src/types.ts, packages/providers/src/errors.ts, packages/providers/src/assembler.ts, packages/providers/src/synthetic.ts, packages/providers/src/index.ts, packages/providers/package.json, packages/providers/test/contract-suite.ts, packages/providers/test/provider.test.ts, packages/core/src/index.ts, apps/server/test/security.test.ts, docs/ARCHITECTURE.md, docs/PROJECT_MEMORY.md, docs/PROGRESS.md
 Verification commands and actual outcomes:
-- pnpm lint (code 0; clean ESLint run across all packages)
+- pnpm lint (code 0; 0 errors across all 7 packages)
 - pnpm typecheck (code 0; strict composite build verified)
-- pnpm test (code 0; 8 test suites, 43/43 tests passed)
+- pnpm test (code 0; 8 test suites, 60/60 tests passed)
+  - packages/providers/test/provider.test.ts (18 passed: 11 contract tests + 5 assembler tests + 1 redaction test + 1 stub test)
   - apps/server/test/security.test.ts (17 passed)
   - apps/server/test/health.test.ts (3 passed)
   - packages/core/test/core.test.ts (8 passed)
   - packages/db/test/persistence.test.ts (9 passed)
   - packages/db/test/db.test.ts (1 passed)
-  - packages/providers/test/provider.test.ts (1 passed)
   - apps/worker/test/worker.test.ts (3 passed)
   - apps/web/test/app.test.tsx (1 passed)
 - pnpm build (code 0; all packages and apps compiled cleanly)
-- pnpm check (code 0; composite gate verified)
-Known limitations/blockers: docs/BUILD_GUIDE.md remains absent; Ollama and Docker local services were not running; task scheduling and tool execution remain deferred to subsequent steps.
-Next step: Step 07
+- pnpm check (code 0; composite verification gate passed)
+Known limitations/blockers: Real model inference and live Ollama connectivity are intentionally deferred to Step 08.
+Next step: Step 08
 ```
 
 ## 9. Decision Log
@@ -150,6 +150,7 @@ Next step: Step 07
 | 2026-10-02 | Adopt Persistent Git / GitHub Rule: every completed step requires focused commit, verification, push to origin, and structured report. | User instruction; repository traceability and synchronization. | Adopted |
 | 2026-10-03 | Enforce strict relational schema with sequence numbers for message/event ordering, non-destructive migrations, atomic state+event batches, and SQLite safety pragmas (FK, WAL, busy_timeout). | Step 05 durable storage and migrations specification. | Adopted |
 | 2026-10-03 | Enforce loopback-only binding, single-owner pairing flow with 15m expiry/max 5 attempts, HttpOnly SameSite=Strict session cookies, Host & Origin gatekeeping, 1MB body limit, workspace scoping checks, and AES-256-GCM encrypted provider credentials. | Step 06 local access and credential protection specification. | Adopted |
+| 2026-10-03 | Establish provider-neutral ModelProviderAdapter contract with normalized streaming events (preserving exact model ID and tool correlation tokens), ToolCallStreamAssembler for safe partial argument accumulation, explicit null usage semantics, capability tri-state, normalized ProviderError categories, and SyntheticTestProvider test double. | Step 07 provider contract and test provider specification. | Adopted |
 
 Future decisions should include the date, the concrete decision, its evidence or rationale, and its current status. Update this memory after each numbered step with only behavior that has actually been verified.
 

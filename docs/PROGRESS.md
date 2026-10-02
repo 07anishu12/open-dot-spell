@@ -302,7 +302,66 @@ Establish the security perimeter for Open Dot Spell before exposing privileged a
 
 ### Next step
 
-Step 07. Do not begin it until the next numbered prompt is supplied.
+Step 07.
+
+## Step 07 — Implement the provider contract and deterministic test provider
+
+**Status:** Implementation complete and verified. Provider-neutral event contract, safe tool argument assembler, capability model, error categories, reusable contract test suite, and deterministic synthetic test provider operational.
+
+### Objective
+
+Implement the provider-neutral abstraction (`ModelProviderAdapter`) supporting health checking, model discovery, streamed chat, capability discovery, and cancellation. Define normalized provider events, safe incremental tool argument assembly (`ToolCallStreamAssembler`), explicit usage semantics (preserving null when unmeasured, never fabricating zero), capability model distinguishing protocol support from observed capabilities (`ObservedModelCapabilities`), bounded timeout and error classification (`ProviderError`), and a deterministic synthetic test provider (`SyntheticTestProvider`) with selectable scenarios.
+
+### Files changed
+
+- `packages/providers/src/types.ts` — provider-neutral interface (`ModelProviderAdapter`), normalized event union (`ProviderEvent`: `text_delta`, `tool_call_start`, `tool_call_delta`, `tool_call_complete`, `usage`, `completed`, `error`), capability records (`ObservedModelCapabilities`, `ModelLimits`, `CapabilitySupport`), health (`ProviderHealth`), model discovery (`DiscoveredModel`), and error categories (`ProviderErrorCategory`).
+- `packages/providers/src/errors.ts` — standardized `ProviderError` class with secret/token redaction via `redactSensitiveData`.
+- `packages/providers/src/assembler.ts` — `ToolCallStreamAssembler` for safe incremental tool argument buffering, strict JSON validation without silent repair, and stream interruption detection (`assertStreamComplete`).
+- `packages/providers/src/synthetic.ts` — `SyntheticTestProvider` deterministic test double with selectable scenarios (`normal_text`, `valid_tool_call`, `malformed_tool_args`, `interrupted_stream`, `timeout`, `cancellation`, `missing_usage`, `unsupported_capability`).
+- `packages/providers/src/index.ts` — unified exports and updated `OllamaProviderStub` adhering to `ModelProviderAdapter`.
+- `packages/providers/package.json` — added `@types/node` dependency for AbortSignal and standard platform types.
+- `packages/providers/test/contract-suite.ts` — reusable multi-adapter contract test suite covering health, discovery, streamed text, event ordering, tool correlation, tool assembly, malformed arguments, usage semantics, cancellation, timeouts, unsupported capabilities, interrupted streams, and capability snapshots.
+- `packages/providers/test/provider.test.ts` — test execution of contract suite on `SyntheticTestProvider`, assembler unit tests, error redaction tests, and stub checks.
+- `packages/core/src/index.ts` — enhanced `redactSensitiveData` string replacement for Bearer tokens and API keys.
+- `apps/server/test/security.test.ts` — updated capability assertion to match `ObservedModelCapabilities` tri-state format.
+- `docs/ARCHITECTURE.md` — documented Section 12 with provider contract, event schemas, tool assembler, usage integrity, capability model, and test doubles.
+- `docs/PROJECT_MEMORY.md` — updated Step 07 progress and decision log.
+- `docs/PROGRESS.md` — this Step 07 record.
+
+### Verification commands and actual outcomes
+
+1. `pnpm check` (Composite gate) — Exit code 0.
+   - `pnpm lint` — Exit code 0. 0 errors, 0 warnings across all 7 packages.
+   - `pnpm typecheck` — Exit code 0. Strict TypeScript composite build passed without error.
+   - `pnpm test` — Exit code 0. 8 test suites, 60/60 tests passing:
+     - `packages/providers/test/provider.test.ts` (18 passed)
+     - `apps/server/test/security.test.ts` (17 passed)
+     - `apps/server/test/health.test.ts` (3 passed)
+     - `packages/core/test/core.test.ts` (8 passed)
+     - `packages/db/test/persistence.test.ts` (9 passed)
+     - `packages/db/test/db.test.ts` (1 passed)
+     - `apps/worker/test/worker.test.ts` (3 passed)
+     - `apps/web/test/app.test.tsx` (1 passed)
+   - `pnpm build` — Exit code 0. All 6 packages and Vite web bundle compiled in 0.5s.
+
+### Manual verification
+
+- Verified all 8 deterministic provider scenarios function reproducibly without live Ollama, external network, or API keys.
+- Verified tool argument assembler raises structured errors on malformed JSON rather than attempting silent repair.
+- Verified missing token usage returns `null` rather than fabricating `0`.
+- Verified cancellation via `AbortSignal` terminates stream and records `finishReason: "cancelled"`.
+- Verified capabilities distinguish verified models from unknown models.
+- Verified credentials and Bearer tokens are scrubbed from provider error messages.
+
+### Known limitations/blockers
+
+- Real model inference and live Ollama connectivity are intentionally deferred to Step 08.
+- `docs/BUILD_GUIDE.md` remains absent from the repository.
+
+### Next step
+
+Step 08. Do not begin it until the next numbered prompt is supplied.
+
 
 
 

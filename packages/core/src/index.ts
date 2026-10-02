@@ -149,10 +149,9 @@ export function redactSensitiveData(data: unknown): unknown {
     return data;
   }
   if (typeof data === "string") {
-    if (/^Bearer\s+[A-Za-z0-9\-._~+/]+=*/i.test(data)) {
-      return "Bearer [REDACTED]";
-    }
-    return data;
+    let sanitized = data.replace(/Bearer\s+[A-Za-z0-9\-._~+/]+=*/gi, "Bearer [REDACTED]");
+    sanitized = sanitized.replace(/sk-[A-Za-z0-9_-]{8,}/gi, "sk-[REDACTED]");
+    return sanitized;
   }
   if (Array.isArray(data)) {
     return data.map(redactSensitiveData);

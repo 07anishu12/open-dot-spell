@@ -1,55 +1,75 @@
-export type ProviderEventType =
-  | "text_delta"
-  | "tool_call_start"
-  | "tool_call_chunk"
-  | "tool_call_complete"
-  | "usage"
-  | "completed"
-  | "error";
+export * from "./types.js";
+export * from "./errors.js";
+export * from "./assembler.js";
+export * from "./synthetic.js";
 
-export type ProviderEvent =
-  | { type: "text_delta"; delta: string }
-  | { type: "tool_call_start"; toolCallId: string; toolName: string }
-  | { type: "tool_call_chunk"; toolCallId: string; argumentsDelta: string }
-  | { type: "tool_call_complete"; toolCallId: string; toolName: string; arguments: Record<string, unknown> }
-  | { type: "usage"; promptTokens: number; completionTokens: number }
-  | { type: "completed"; finishReason: "stop" | "tool_calls" | "length" | "error" }
-  | { type: "error"; code: string; message: string; fatal: boolean };
+import {
+  type ModelProviderAdapter,
+  type ObservedModelCapabilities,
+  type ProviderHealth,
+  type DiscoveredModel,
+  type ProviderChatRequest,
+  type StreamChatOptions,
+  type ProviderEvent
+} from "./types.js";
 
-export interface ModelCapability {
-  supportsTools: boolean;
-  supportsJsonSchema: boolean;
-  supportsVision: boolean;
-  supportsStreaming: boolean;
-  contextLimit: number;
-}
-
-export interface ModelProviderAdapter {
-  readonly providerId: string;
-  readonly providerType: "ollama" | "custom_remote";
-  readonly isLocal: boolean;
-  getCapabilities(modelName: string): Promise<ModelCapability>;
-  testConnection(): Promise<{ reachable: boolean; latencyMs: number }>;
-}
+// Backward-compatibility alias
+export type ModelCapability = ObservedModelCapabilities;
 
 export class OllamaProviderStub implements ModelProviderAdapter {
   readonly providerId = "prov_ollama_local";
   readonly providerType = "ollama" as const;
   readonly isLocal = true;
 
-  constructor(private readonly baseUrl: string = "http://127.0.0.1:11434") {}
+  constructor(public readonly baseUrl: string = "http://127.0.0.1:11434") {}
 
-  async getCapabilities(_modelName: string): Promise<ModelCapability> {
-    return {
-      supportsTools: true,
-      supportsJsonSchema: true,
-      supportsVision: false,
-      supportsStreaming: true,
-      contextLimit: 8192
-    };
+  async checkHealth(): Promise<ProviderHealth> {
+    return { reachable: false, latencyMs: null, error: "Ollama service not reached (stub)" };
   }
 
   async testConnection(): Promise<{ reachable: boolean; latencyMs: number }> {
     return { reachable: false, latencyMs: 0 };
+  }
+
+  async discoverModels(): Promise<DiscoveredModel[]> {
+    return [];
+  }
+
+  async getCapabilities(modelId: string): Promise<ObservedModelCapabilities> {
+    return {
+      providerId: this.providerId,
+      modelId,
+      runtimeVersion: null,
+      probeDate: "2026-10-03T00:00:00.000Z",
+      limits: {
+        contextLimit: 8192,
+        outputLimit: 2048,
+        requestTimeoutMs: 30000
+      },
+      streaming: "supported",
+      toolCalling: "supported",
+      structuredOutput: "supported",
+      vision: "unknown",
+      embeddings: "unknown",
+      imageGeneration: "unsupported"
+    };
+  }
+
+  async *streamChat(
+    request: ProviderChatRequest,
+    _options?: StreamChatOptions
+  ): AsyncIterable<ProviderEvent> {
+    yield {
+      type: "error",
+      modelId: request.modelId,
+      category: "connection_failure",
+      message: "Ollama local service is not reachable. Live connection deferred to Step 08.",
+      fatal: true
+    };
+    yield {
+      type: "completed",
+      modelId: request.modelId,
+      finishReason: "error"
+    };
   }
 }
