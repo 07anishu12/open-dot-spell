@@ -62,6 +62,7 @@ export const runs = sqliteTable(
     status: text("status", {
       enum: ["queued", "running", "succeeded", "failed", "interrupted", "cancelled"]
     }).notNull(),
+    idempotencyKey: text("idempotency_key"),
     startedAt: text("started_at").notNull(),
     finishedAt: text("finished_at"),
     errorMessage: text("error_message")
@@ -69,7 +70,8 @@ export const runs = sqliteTable(
   (table) => [
     index("idx_runs_workspace").on(table.workspaceId),
     index("idx_runs_status").on(table.status),
-    index("idx_runs_lease").on(table.leaseExpiresAt)
+    index("idx_runs_lease").on(table.leaseExpiresAt),
+    uniqueIndex("idx_runs_conv_idempotency").on(table.conversationId, table.idempotencyKey)
   ]
 );
 

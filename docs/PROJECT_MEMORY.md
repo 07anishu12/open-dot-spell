@@ -112,20 +112,21 @@ Models, webpages, files, MCP servers, tool descriptions, and external content ca
 ## 8. Current Progress
 
 ```text
-Step: 08
-Behavior delivered: Connected Ollama native adapter (/api/chat, /api/tags, /api/show) and OpenAI-compatible adapter (/v1/chat/completions, /v1/models) to ModelProviderAdapter, capability probing pipeline (probeModelCapabilities), loopback privacy policy enforcement (validateProviderEndpoint), NDJSON & SSE stream decoders, tool call assembly, explicit null token usage semantics, and honest live smoke check with BLOCKED status reporting.
-Files changed: packages/providers/src/policy.ts, packages/providers/src/ollama.ts, packages/providers/src/openai-compatible.ts, packages/providers/src/probes.ts, packages/providers/src/index.ts, packages/providers/test/ollama.test.ts, packages/providers/test/openai-compatible.test.ts, packages/providers/test/probes.test.ts, packages/providers/test/live-smoke.test.ts, docs/ARCHITECTURE.md, docs/SECURITY.md, docs/PROJECT_MEMORY.md, docs/PROGRESS.md
+Step: 09
+Behavior delivered: Persistent conversation lifecycle APIs (create/list/reload), message turn submission with required idempotencyKey and transactional persistence (messages + runs + run_events), provisional single-worker execution with text delta coalescing (threshold: 64 chars or 80ms) without a transaction per token, terminal assistant state persistence with usage metrics, and reconnectable authorized SSE with durable cursor replay (Last-Event-ID), heartbeat, and browser disconnect decoupling.
+Files changed: packages/core/src/index.ts, packages/db/src/schema.ts, packages/db/src/migrations.ts, packages/db/src/queries.ts, packages/db/test/persistence.test.ts, apps/worker/package.json, apps/worker/tsconfig.json, apps/worker/src/index.ts, apps/worker/src/worker.ts, apps/server/package.json, apps/server/tsconfig.json, apps/server/src/app.ts, apps/server/test/conversations-stream.test.ts, docs/ARCHITECTURE.md, docs/PROJECT_MEMORY.md, docs/PROGRESS.md
 Verification commands and actual outcomes:
 - pnpm lint (code 0; 0 errors across all 7 packages)
 - pnpm typecheck (code 0; strict composite build verified)
-- pnpm test (code 0; 12 test suites, 78/78 tests passed)
+- pnpm test (code 0; 13 test suites, 92/92 tests passed)
+  - apps/server/test/conversations-stream.test.ts (14 passed)
+  - apps/server/test/security.test.ts (17 passed)
+  - apps/server/test/health.test.ts (3 passed)
   - packages/providers/test/provider.test.ts (18 passed)
   - packages/providers/test/ollama.test.ts (8 passed)
   - packages/providers/test/openai-compatible.test.ts (6 passed)
   - packages/providers/test/probes.test.ts (3 passed)
   - packages/providers/test/live-smoke.test.ts (1 passed — honest BLOCKED status logged)
-  - apps/server/test/security.test.ts (17 passed)
-  - apps/server/test/health.test.ts (3 passed)
   - packages/core/test/core.test.ts (8 passed)
   - packages/db/test/persistence.test.ts (9 passed)
   - packages/db/test/db.test.ts (1 passed)
@@ -133,10 +134,10 @@ Verification commands and actual outcomes:
   - apps/web/test/app.test.tsx (1 passed)
 - pnpm build (code 0; all packages and apps compiled cleanly)
 - pnpm check (code 0; composite verification gate passed)
-Live Ollama Smoke Check:
-- Live Ollama Status: BLOCKED (Ollama daemon not running on 127.0.0.1:11434; no local model weights present). No mock data fabricated; deterministic suites passed with in-process mock HTTP servers.
+Real Ollama Check:
+- Live Ollama Status: BLOCKED (Ollama daemon offline on 127.0.0.1:11434; connection refused; no model weights present). No mock data fabricated; deterministic suites passed with in-process test doubles.
 Known limitations/blockers: Live local inference requires manual startup of `ollama serve` and model pulling outside the agent run.
-Next step: Step 09
+Next step: Step 10
 ```
 
 ## 9. Decision Log
@@ -158,6 +159,8 @@ Next step: Step 09
 | 2026-10-03 | Enforce loopback-only binding, single-owner pairing flow with 15m expiry/max 5 attempts, HttpOnly SameSite=Strict session cookies, Host & Origin gatekeeping, 1MB body limit, workspace scoping checks, and AES-256-GCM encrypted provider credentials. | Step 06 local access and credential protection specification. | Adopted |
 | 2026-10-03 | Establish provider-neutral ModelProviderAdapter contract with normalized streaming events (preserving exact model ID and tool correlation tokens), ToolCallStreamAssembler for safe partial argument accumulation, explicit null usage semantics, capability tri-state, normalized ProviderError categories, and SyntheticTestProvider test double. | Step 07 provider contract and test provider specification. | Adopted |
 | 2026-10-03 | Implement Ollama native adapter (/api/chat) and OpenAI-compatible adapter (/v1/chat/completions) with NDJSON/SSE streaming, tool assembly, JSON schema mapping, probeModelCapabilities pipeline, loopback endpoint validation (local_only mode), and honest live service fallback without fabricated results. | Step 08 Ollama and compatible provider connection specification. | Adopted |
+| 2026-10-03 | Implement persistent conversation lifecycle APIs, required idempotency key preventing duplicate user turns, transactional user turn + run intent persistence before ID return, provisional single-worker execution with delta coalescing (threshold: 64 chars or 80ms) without a transaction per token, and reconnectable SSE with cursor replay (Last-Event-ID), heartbeat, and client disconnect decoupling. | Step 09 conversation persistence and streaming run events specification. | Adopted |
 
 Future decisions should include the date, the concrete decision, its evidence or rationale, and its current status. Update this memory after each numbered step with only behavior that has actually been verified.
+
 

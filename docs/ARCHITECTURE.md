@@ -712,6 +712,30 @@ Development, CI, and contract verification rely on `SyntheticTestProvider`:
   - `hybrid`: Remote endpoints permitted only when explicitly authorized by workspace owner settings.
 - Model proposals or untrusted data have zero authority to alter provider endpoints or privacy mode.
 
+### 12.5 Conversation Persistence, Worker Execution, and Reconnectable SSE (Step 09)
+
+#### 1. Transactional Turn Intent & Idempotency
+- When a user submits a turn (`POST /api/workspaces/:workspaceId/conversations/:conversationId/messages`):
+  - A client-generated `idempotencyKey` is required.
+  - The user message (`messages` table), run intent (`runs` table with status `"queued"`), and initial `run_queued` event (`run_events` table) are committed in a single atomic SQLite transaction (`createUserTurnAndRunTransaction`).
+  - If a request with an existing `(conversation_id, idempotency_key)` arrives, the existing message ID, run ID, and status are returned without creating duplicate turns or secondary runs.
+  - IDs are returned to the client only after transactional persistence succeeds.
+
+#### 2. Provisional Single-Worker Claim & Coalesced Stream Events
+- A lightweight worker (`WorkerProcess`) claims queued runs with a transactional lease (`claimQueuedRun`) and fencing token.
+- Provider streaming decodes text tokens asynchronously. To prevent SQLite transaction churn, tokens are coalesced in memory and flushed periodically (threshold: 64 characters or 80ms) into `run_events`.
+- Assistant responses, token usage metrics, and terminal status (`succeeded`, `failed`, or `interrupted`) are committed atomically upon completion.
+
+#### 3. Reconnectable SSE Stream with Durable Replay
+- The SSE endpoint (`GET /api/workspaces/:workspaceId/runs/:runId/events`):
+  - Requires local owner authentication and verifies workspace scoping.
+  - Parses cursor from `Last-Event-ID` header or `?cursor=...`.
+  - Replays historical events directly from SQLite where `id > cursor`.
+  - Seamlessly transitions to live broadcasting via in-process `RunEventBus` without event loss or duplication.
+  - Emits periodic SSE heartbeat comments (`: heartbeat\n\n`) to preserve connection liveness across proxies and browser timeouts.
+  - Emits `event: done` and closes connection upon reaching terminal state.
+  - Client / UI disconnects close the HTTP stream cleanly and **do not terminate** the server-side worker inference.
+
 ---
 
 ## 13. Artifact Model and Atomic Staging

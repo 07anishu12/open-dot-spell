@@ -1,21 +1,29 @@
+export * from "./worker.js";
+
+import { fileURLToPath } from "node:url";
 import { WorkerProcess } from "./worker.js";
 import { createDatabaseClient } from "@open-dot-spell/db";
 
-// Initialize database with automated migrations
-const db = await createDatabaseClient();
+// Run standalone worker if executed directly as entrypoint
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 
-const worker = new WorkerProcess(db);
-worker.attachSignalHandlers();
+if (isMain) {
+  // Initialize database with automated migrations
+  const db = await createDatabaseClient();
 
-console.log("Starting Open Dot Spell Worker...");
-await worker.start();
-console.log(`Open Dot Spell Worker ready. Standby mode (database: ${db.dbPath}).`);
+  const worker = new WorkerProcess(db);
+  worker.attachSignalHandlers();
 
-// Keep process alive in standby
-const interval = setInterval(() => {
-  // Heartbeat check (standby)
-}, 60000);
+  console.log("Starting Open Dot Spell Worker...");
+  await worker.start();
+  console.log(`Open Dot Spell Worker ready. Standby mode (database: ${db.dbPath}).`);
 
-process.on("exit", () => {
-  clearInterval(interval);
-});
+  // Keep process alive in standby
+  const interval = setInterval(() => {
+    // Heartbeat check (standby)
+  }, 60000);
+
+  process.on("exit", () => {
+    clearInterval(interval);
+  });
+}

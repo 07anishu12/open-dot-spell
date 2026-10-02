@@ -199,6 +199,9 @@ importers:
       '@open-dot-spell/providers':
         specifier: workspace:*
         version: link:../../packages/providers
+      '@open-dot-spell/worker':
+        specifier: workspace:*
+        version: link:../worker
       fastify:
         specifier: ^5.2.1
         version: 5.12.5
@@ -258,6 +261,9 @@ importers:
       '@open-dot-spell/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@open-dot-spell/providers':
+        specifier: workspace:*
+        version: link:../../packages/providers
     devDependencies:
       '@types/node':
         specifier: ^22.13.4

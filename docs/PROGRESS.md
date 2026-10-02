@@ -421,3 +421,66 @@ Connect Ollama and a second compatible inference provider (OpenAI-compatible) be
 ### Next step
 
 Step 09. Do not begin it until the next numbered prompt is supplied.
+
+## Step 09 — Persist conversations and stream run events
+
+**Status:** Implementation complete and verified. Conversation + message APIs, transactional turn persistence, idempotency key deduplication, provisional single-worker execution with text delta coalescing, and reconnectable SSE with cursor replay and heartbeat operational.
+
+### Objective
+
+Implement persistent conversation and message lifecycle APIs, transactional turn persistence, required client idempotency key to prevent duplicate user turns, provisional single-worker claim and text-only inference path using existing provider abstraction, durable run events with monotonically ordered event IDs, batched/coalesced text delta persistence, and reconnectable authorized SSE with cursor replay (`Last-Event-ID`), periodic heartbeat, and complete decoupling of worker execution from client connection state.
+
+### Files changed
+
+- `packages/core/src/index.ts` — defined `CreateConversationRequestSchema`, `CreateMessageRequestSchema`, `RunStreamEvent`, and `RunEventBus`.
+- `packages/db/src/schema.ts` — added `idempotencyKey` and `uniqueIndex("idx_runs_conv_idempotency")` on `(conversationId, idempotencyKey)` to `runs` table schema.
+- `packages/db/src/migrations.ts` — added migration 3 (`0003_run_idempotency`) executing `ALTER TABLE runs ADD COLUMN idempotency_key TEXT;` and creating the unique index.
+- `packages/db/src/queries.ts` — implemented `createConversation`, `listConversations`, `getConversation`, `createUserTurnAndRunTransaction` (atomic turn persistence with idempotency handling), `claimQueuedRun` (provisional worker lease with fencing token), `completeAssistantRun` (atomic message persistence and status transition), `getRun`, `getRunEventsAfterCursor`, and `batchInsertRunEvents`.
+- `packages/db/test/persistence.test.ts` — updated migration version expectations to account for migration 3 (`[1, 2, 3]`).
+- `apps/worker/package.json` — added `@open-dot-spell/providers` dependency and `./worker` export.
+- `apps/worker/tsconfig.json` — added project reference to `packages/providers`.
+- `apps/worker/src/index.ts` — exported `./worker.js` and guarded standalone CLI execution to prevent auto-start on import.
+- `apps/worker/src/worker.ts` — implemented `WorkerProcess` with background polling, provisional single-worker leasing, text-only inference via `ModelProviderAdapter`, delta coalescing (threshold: 64 chars or 80ms) without transaction per token, terminal state finalization, and signal handlers.
+- `apps/server/package.json` — added `@open-dot-spell/worker` dependency.
+- `apps/server/tsconfig.json` — added project reference to `apps/worker`.
+- `apps/server/src/app.ts` — added conversation CRUD routes, message turn route with required idempotency key, run status route, and reconnectable SSE endpoint (`/events` and `/stream`) with cursor replay, heartbeat, and client disconnect handling.
+- `apps/server/test/conversations-stream.test.ts` — comprehensive test suite covering conversation lifecycle, duplicate submission idempotency, transactional message & run creation, ordered event IDs, worker inference with delta coalescing, provider error handling, interrupted inference, SSE cursor replay, SSE live transition via `RunEventBus`, heartbeat, persistence across database reopen, and worker continuation across UI disconnect (14 tests).
+- `docs/ARCHITECTURE.md` — documented Section 12.5 (turn idempotency, provisional worker claim, text coalescing, reconnectable SSE).
+- `docs/PROJECT_MEMORY.md` — updated Step 09 progress and decision log.
+- `docs/PROGRESS.md` — this Step 09 record.
+
+### Verification commands and actual outcomes
+
+1. `pnpm check` (Composite gate) — Exit code 0.
+   - `pnpm lint` — Exit code 0. 0 errors, 0 warnings across all 7 workspace packages.
+   - `pnpm typecheck` — Exit code 0. Strict TypeScript composite build passed across all projects.
+   - `pnpm test` — Exit code 0. 13 test suites, 92/92 tests passing:
+     - `apps/server/test/conversations-stream.test.ts` (14 passed)
+     - `apps/server/test/security.test.ts` (17 passed)
+     - `apps/server/test/health.test.ts` (3 passed)
+     - `packages/providers/test/provider.test.ts` (18 passed)
+     - `packages/providers/test/ollama.test.ts` (8 passed)
+     - `packages/providers/test/openai-compatible.test.ts` (6 passed)
+     - `packages/providers/test/probes.test.ts` (3 passed)
+     - `packages/providers/test/live-smoke.test.ts` (1 passed — honest BLOCKED status logged)
+     - `packages/core/test/core.test.ts` (8 passed)
+     - `packages/db/test/persistence.test.ts` (9 passed)
+     - `packages/db/test/db.test.ts` (1 passed)
+     - `apps/worker/test/worker.test.ts` (3 passed)
+     - `apps/web/test/app.test.tsx` (1 passed)
+   - `pnpm build` — Exit code 0. All 6 packages and Vite web bundle compiled cleanly.
+
+### Real Ollama Text Inference Outcome
+
+- **Real Ollama Check:** `BLOCKED`
+- **Reason:** Local Ollama daemon is not running on `127.0.0.1:11434` (`curl` exited with code 7: connection refused), and no local model weights are present.
+- **Reporting Compliance:** Per instructions, success is not claimed for live inference while the daemon is offline. Deterministic test doubles (`SyntheticTestProvider`) thoroughly verified all text streaming, coalescing, error handling, and reconnection behaviors without fabricating live model output.
+
+### Known limitations/blockers
+
+- Live local model inference requires starting `ollama serve` and pulling a supported model outside the agent run.
+- `docs/BUILD_GUIDE.md` remains absent from the repository.
+
+### Next step
+
+Step 10. Do not begin it until the next numbered prompt is supplied.

@@ -49,7 +49,7 @@ describe("Persistence Layer Integration Tests", () => {
 
     // Run migrations
     const res = await runMigrations(client);
-    expect(res.appliedCount).toBe(2);
+    expect(res.appliedCount).toBe(3);
 
     // Verify tables exist
     const afterTables = await client.execute(
@@ -65,7 +65,7 @@ describe("Persistence Layer Integration Tests", () => {
     expect(tableNames).toContain("provider_credentials");
 
     const versions = await getAppliedMigrationVersions(client);
-    expect(versions).toEqual([1, 2]);
+    expect(versions).toEqual([1, 2, 3]);
 
     await close();
   });
@@ -78,7 +78,7 @@ describe("Persistence Layer Integration Tests", () => {
     expect(res.appliedCount).toBe(0);
 
     const versions = await getAppliedMigrationVersions(client);
-    expect(versions).toEqual([1, 2]);
+    expect(versions).toEqual([1, 2, 3]);
 
     await close();
   });
@@ -237,7 +237,7 @@ describe("Persistence Layer Integration Tests", () => {
 
     // Verify migration version 999 was not marked applied
     const versions = await getAppliedMigrationVersions(client);
-    expect(versions).toEqual([1, 2]);
+    expect(versions).toEqual([1, 2, 3]);
 
     await close();
   });

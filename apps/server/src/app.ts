@@ -6,6 +6,9 @@ import {
   HealthResponse,
   PairingRequestSchema,
   StoreCredentialSchema,
+  CreateConversationRequestSchema,
+  CreateMessageRequestSchema,
+  RunEventBus,
   maskSecret,
   encryptSecret,
   deriveMasterKey,
@@ -15,9 +18,17 @@ import {
   type DatabaseInstance,
   verifyWorkspaceScope,
   insertProviderCredential,
-  listProviderCredentials
+  listProviderCredentials,
+  createConversation,
+  listConversations,
+  getConversation,
+  getConversationMessages,
+  createUserTurnAndRunTransaction,
+  getRun,
+  getRunEventsAfterCursor
 } from "@open-dot-spell/db";
 import { OllamaProviderStub } from "@open-dot-spell/providers";
+import { WorkerProcess } from "@open-dot-spell/worker";
 import { AuthManager } from "./auth.js";
 
 export { AuthManager };
@@ -29,11 +40,15 @@ export interface AppOptions {
   db?: DatabaseInstance;
   authManager?: AuthManager;
   masterKey?: Buffer;
+  worker?: WorkerProcess;
+  eventBus?: RunEventBus;
+  sseHeartbeatMs?: number;
 }
 
 export function buildApp(options: AppOptions = {}): FastifyInstance {
   const authManager = options.authManager ?? new AuthManager();
   const masterKey = options.masterKey ?? deriveMasterKey("open-dot-spell-local-master-key-seed");
+  const eventBus = options.eventBus ?? new RunEventBus();
 
   const app = Fastify({
     logger: false,
@@ -222,11 +237,109 @@ export function buildApp(options: AppOptions = {}): FastifyInstance {
     return reply.code(200).send({ success: true });
   });
 
-  // Protected workspace resource: get conversation scoped to workspace
+  // ==========================================
+  // Conversation & Message APIs (Step 09)
+  // ==========================================
+
+  // Create conversation
+  app.post<{
+    Params: { workspaceId: string };
+  }>(
+    "/api/workspaces/:workspaceId/conversations",
+    { preHandler: requireOwnerAuth },
+    async (request, reply) => {
+      const { workspaceId } = request.params;
+      if (!options.db) {
+        return reply.code(500).send({ error: "Database not configured" });
+      }
+
+      const parseResult = CreateConversationRequestSchema.safeParse(request.body);
+      if (!parseResult.success) {
+        return reply.code(400).send({
+          error: "Invalid conversation payload",
+          details: parseResult.error.flatten()
+        });
+      }
+
+      const wsRes = await options.db.client.execute({
+        sql: "SELECT id FROM workspaces WHERE id = ?;",
+        args: [workspaceId]
+      });
+      if (wsRes.rows.length === 0) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+
+      const now = new Date().toISOString();
+      const id = `conv_${randomBytes(8).toString("hex")}`;
+      const conversation = await createConversation(options.db.client, {
+        id,
+        workspaceId,
+        title: parseResult.data.title,
+        modelId: parseResult.data.modelId,
+        providerId: parseResult.data.providerId,
+        createdAt: now,
+        updatedAt: now
+      });
+
+      return reply.code(201).send({ conversation });
+    }
+  );
+
+  // List conversations in workspace
+  app.get<{
+    Params: { workspaceId: string };
+  }>(
+    "/api/workspaces/:workspaceId/conversations",
+    { preHandler: requireOwnerAuth },
+    async (request, reply) => {
+      const { workspaceId } = request.params;
+      if (!options.db) {
+        return reply.code(500).send({ error: "Database not configured" });
+      }
+
+      const conversationsList = await listConversations(options.db.client, workspaceId);
+      return reply.code(200).send({ conversations: conversationsList });
+    }
+  );
+
+  // Get/reload conversation
   app.get<{
     Params: { workspaceId: string; conversationId: string };
   }>(
     "/api/workspaces/:workspaceId/conversations/:conversationId",
+    { preHandler: requireOwnerAuth },
+    async (request, reply) => {
+      const { workspaceId, conversationId } = request.params;
+      if (!options.db) {
+        return reply.code(500).send({ error: "Database not configured" });
+      }
+
+      const conversation = await getConversation(
+        options.db.client,
+        conversationId,
+        workspaceId
+      );
+
+      if (!conversation) {
+        return reply.code(404).send({
+          error: "Conversation not found or does not belong to specified workspace"
+        });
+      }
+
+      return reply.code(200).send({
+        workspaceId,
+        conversationId,
+        status: "accessible",
+        conversation
+      });
+    }
+  );
+
+  // Get conversation messages
+  app.get<{
+    Params: { workspaceId: string; conversationId: string };
+  }>(
+    "/api/workspaces/:workspaceId/conversations/:conversationId/messages",
     { preHandler: requireOwnerAuth },
     async (request, reply) => {
       const { workspaceId, conversationId } = request.params;
@@ -247,11 +360,61 @@ export function buildApp(options: AppOptions = {}): FastifyInstance {
         });
       }
 
-      return reply.code(200).send({
+      const messagesList = await getConversationMessages(options.db.client, conversationId);
+      return reply.code(200).send({ messages: messagesList });
+    }
+  );
+
+  // Create message and trigger run execution (transactional, idempotency required)
+  app.post<{
+    Params: { workspaceId: string; conversationId: string };
+  }>(
+    "/api/workspaces/:workspaceId/conversations/:conversationId/messages",
+    { preHandler: requireOwnerAuth },
+    async (request, reply) => {
+      const { workspaceId, conversationId } = request.params;
+      if (!options.db) {
+        return reply.code(500).send({ error: "Database not configured" });
+      }
+
+      const parseResult = CreateMessageRequestSchema.safeParse(request.body);
+      if (!parseResult.success) {
+        return reply.code(400).send({
+          error: "Invalid message payload",
+          details: parseResult.error.flatten()
+        });
+      }
+
+      const isValid = await verifyWorkspaceScope(
+        options.db.client,
+        "conversation",
+        conversationId,
+        workspaceId
+      );
+
+      if (!isValid) {
+        return reply.code(404).send({
+          error: "Conversation not found or does not belong to specified workspace"
+        });
+      }
+
+      // Persist the user message and run intent transactionally before returning IDs
+      const result = await createUserTurnAndRunTransaction(options.db.client, {
         workspaceId,
         conversationId,
-        status: "accessible"
+        content: parseResult.data.content,
+        idempotencyKey: parseResult.data.idempotencyKey
       });
+
+      // If a new run was created and a worker is attached, trigger background run processing
+      if (!result.isDuplicate && options.worker) {
+        setImmediate(() => {
+          options.worker?.processNextRun().catch(() => {});
+        });
+      }
+
+      const statusCode = result.isDuplicate ? 200 : 201;
+      return reply.code(statusCode).send(result);
     }
   );
 
@@ -267,14 +430,8 @@ export function buildApp(options: AppOptions = {}): FastifyInstance {
         return reply.code(500).send({ error: "Database not configured" });
       }
 
-      const isValid = await verifyWorkspaceScope(
-        options.db.client,
-        "run",
-        runId,
-        workspaceId
-      );
-
-      if (!isValid) {
+      const run = await getRun(options.db.client, runId, workspaceId);
+      if (!run) {
         return reply.code(404).send({
           error: "Run not found or does not belong to specified workspace"
         });
@@ -283,9 +440,152 @@ export function buildApp(options: AppOptions = {}): FastifyInstance {
       return reply.code(200).send({
         workspaceId,
         runId,
-        status: "accessible"
+        status: "accessible",
+        run
       });
     }
+  );
+
+  // ==========================================
+  // Reconnectable SSE Stream API (Step 09)
+  // ==========================================
+
+  const sseHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { workspaceId, runId } = request.params as { workspaceId: string; runId: string };
+    if (!options.db) {
+      return reply.code(500).send({ error: "Database not configured" });
+    }
+
+    const run = await getRun(options.db.client, runId, workspaceId);
+    if (!run) {
+      return reply.code(404).send({
+        error: "Run not found or does not belong to specified workspace"
+      });
+    }
+
+    // Determine starting cursor from Last-Event-ID header or query string
+    const query = request.query as Record<string, string | undefined>;
+    const headerCursor = request.headers["last-event-id"];
+    const queryCursor = query?.["last-event-id"] ?? query?.["cursor"];
+    let cursor = 0;
+    if (typeof headerCursor === "string" && headerCursor.trim()) {
+      cursor = parseInt(headerCursor, 10) || 0;
+    } else if (typeof queryCursor === "string" && queryCursor.trim()) {
+      cursor = parseInt(queryCursor, 10) || 0;
+    }
+
+    // Send SSE response headers
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no"
+    });
+
+    let maxSentId = cursor;
+    let isClosed = false;
+
+    const writeEvent = (id: number, eventType: string, payload: unknown) => {
+      if (isClosed) return;
+      const dataStr = typeof payload === "string" ? payload : JSON.stringify(payload);
+      reply.raw.write(`id: ${id}\nevent: ${eventType}\ndata: ${dataStr}\n\n`);
+    };
+
+    // Step A: Durable replay of persisted events from SQLite where id > cursor
+    const replayedEvents = await getRunEventsAfterCursor(options.db.client, runId, cursor);
+    for (const ev of replayedEvents) {
+      writeEvent(ev.id, ev.eventType, ev.payload);
+      if (ev.id > maxSentId) {
+        maxSentId = ev.id;
+      }
+    }
+
+    // Step B: Check if run is already in terminal state
+    const currentRun = await getRun(options.db.client, runId, workspaceId);
+    const terminalStatuses = new Set(["succeeded", "failed", "interrupted", "cancelled"]);
+    if (currentRun && terminalStatuses.has(currentRun.status)) {
+      writeEvent(maxSentId + 1, "done", { status: currentRun.status });
+      reply.raw.end();
+      return;
+    }
+
+    // Step C: Seamless transition to live event emission via RunEventBus
+    let heartbeatTimer: NodeJS.Timeout | null = null;
+    let unsubscribe: (() => void) | null = null;
+
+    const cleanup = () => {
+      if (isClosed) return;
+      isClosed = true;
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
+    };
+
+    unsubscribe = eventBus.subscribe(runId, (ev) => {
+      if (isClosed) return;
+      // Deduplicate: ignore events that were already replayed from database
+      if (ev.id <= maxSentId) return;
+      maxSentId = ev.id;
+
+      writeEvent(ev.id, ev.eventType, ev.payload);
+
+      // Terminal event closure
+      if (
+        ev.eventType === "run_completed" ||
+        ev.eventType === "run_failed" ||
+        ev.eventType === "run_interrupted"
+      ) {
+        const terminalStatus = ev.payload["status"] ?? (ev.eventType === "run_completed" ? "succeeded" : "failed");
+        writeEvent(maxSentId + 1, "done", { status: terminalStatus });
+        cleanup();
+        reply.raw.end();
+      }
+    });
+
+    // Check again if run reached terminal state during transition
+    const latestRun = await getRun(options.db.client, runId, workspaceId);
+    if (latestRun && terminalStatuses.has(latestRun.status)) {
+      // Replay any events written during transition
+      const transitionEvents = await getRunEventsAfterCursor(options.db.client, runId, maxSentId);
+      for (const ev of transitionEvents) {
+        writeEvent(ev.id, ev.eventType, ev.payload);
+        if (ev.id > maxSentId) maxSentId = ev.id;
+      }
+      writeEvent(maxSentId + 1, "done", { status: latestRun.status });
+      cleanup();
+      reply.raw.end();
+      return;
+    }
+
+    // Step D: Periodic SSE heartbeat
+    const heartbeatMs = options.sseHeartbeatMs ?? 15000;
+    heartbeatTimer = setInterval(() => {
+      if (!isClosed) {
+        reply.raw.write(": heartbeat\n\n");
+      }
+    }, heartbeatMs);
+
+    // Client/UI disconnect: closes HTTP stream cleanly, does NOT terminate worker execution!
+    request.raw.on("close", () => {
+      cleanup();
+    });
+  };
+
+  app.get(
+    "/api/workspaces/:workspaceId/runs/:runId/events",
+    { preHandler: requireOwnerAuth },
+    sseHandler
+  );
+
+  app.get(
+    "/api/workspaces/:workspaceId/runs/:runId/stream",
+    { preHandler: requireOwnerAuth },
+    sseHandler
   );
 
   // Protected credentials endpoint: list credentials without exposing secret values

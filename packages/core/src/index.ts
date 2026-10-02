@@ -214,3 +214,66 @@ export function decryptSecret(payload: EncryptedPayload, key: Buffer): string {
   return plainText;
 }
 
+// ==========================================
+// Conversation & Message Request Schemas (Step 09)
+// ==========================================
+
+export const CreateConversationRequestSchema = z.object({
+  title: z.string().min(1).default("New Conversation"),
+  modelId: z.string().min(1, "modelId is required"),
+  providerId: z.string().min(1, "providerId is required")
+});
+export type CreateConversationRequest = z.infer<typeof CreateConversationRequestSchema>;
+
+export const CreateMessageRequestSchema = z.object({
+  content: z.string().min(1, "content cannot be empty"),
+  idempotencyKey: z.string().min(1, "idempotencyKey is required")
+});
+export type CreateMessageRequest = z.infer<typeof CreateMessageRequestSchema>;
+
+export interface RunStreamEvent {
+  id: number;
+  runId: string;
+  sequenceNumber: number;
+  eventType: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+}
+
+export class RunEventBus {
+  private listeners = new Map<string, Set<(event: RunStreamEvent) => void>>();
+
+  subscribe(runId: string, handler: (event: RunStreamEvent) => void): () => void {
+    let set = this.listeners.get(runId);
+    if (!set) {
+      set = new Set();
+      this.listeners.set(runId, set);
+    }
+    set.add(handler);
+    return () => {
+      set?.delete(handler);
+      if (set && set.size === 0) {
+        this.listeners.delete(runId);
+      }
+    };
+  }
+
+  emit(event: RunStreamEvent): void {
+    const set = this.listeners.get(event.runId);
+    if (set) {
+      for (const handler of Array.from(set)) {
+        try {
+          handler(event);
+        } catch {
+          // Ignore listener error
+        }
+      }
+    }
+  }
+
+  listenerCount(runId: string): number {
+    return this.listeners.get(runId)?.size ?? 0;
+  }
+}
+
+

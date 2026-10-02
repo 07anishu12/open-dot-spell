@@ -99,6 +99,14 @@ export const MIGRATIONS: Migration[] = [
         updated_at TEXT NOT NULL
       );`
     ]
+  },
+  {
+    version: 3,
+    name: "0003_run_idempotency",
+    sql: [
+      `ALTER TABLE runs ADD COLUMN idempotency_key TEXT;`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_conv_idempotency ON runs(conversation_id, idempotency_key);`
+    ]
   }
 ];
 

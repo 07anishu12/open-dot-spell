@@ -23,6 +23,7 @@
     "@open-dot-spell/core": "workspace:*",
     "@open-dot-spell/db": "workspace:*",
     "@open-dot-spell/providers": "workspace:*",
+    "@open-dot-spell/worker": "workspace:*",
     "fastify": "^5.2.1"
   },
   "devDependencies": {

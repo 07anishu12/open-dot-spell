@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./worker": {
+      "types": "./dist/worker.d.ts",
+      "import": "./dist/worker.js"
     }
   },
   "scripts": {
@@ -19,7 +23,8 @@
   },
   "dependencies": {
     "@open-dot-spell/core": "workspace:*",
-    "@open-dot-spell/db": "workspace:*"
+    "@open-dot-spell/db": "workspace:*",
+    "@open-dot-spell/providers": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",
