@@ -362,7 +362,62 @@ Implement the provider-neutral abstraction (`ModelProviderAdapter`) supporting h
 
 Step 08. Do not begin it until the next numbered prompt is supplied.
 
+## Step 08 — Connect Ollama and a second compatible provider
 
+**Status:** Implementation complete and verified. Ollama native adapter, OpenAI-compatible chat adapter, capability probing pipeline, loopback privacy validation, deterministic test suites, and honest live smoke check operational.
 
+### Objective
 
+Connect Ollama and a second compatible inference provider (OpenAI-compatible) behind the Step 07 `ModelProviderAdapter` interface. Implement live-model capability probes (`probeModelCapabilities`), enforce local-only loopback endpoint restrictions by default (`validateProviderEndpoint`), normalize protocol differences, decode streaming chunks (NDJSON and SSE), assemble incremental tool calls safely, preserve explicit null token usage semantics, classify and redact errors, and honestly report live service status without fabricating results or downloading unverified models.
 
+### Files changed
+
+- `packages/providers/src/policy.ts` — `validateProviderEndpoint` enforcing loopback endpoints (`127.0.0.1`, `::1`, `localhost`) in `local_only` mode and requiring explicit `hybrid` privacy mode for remote endpoints.
+- `packages/providers/src/ollama.ts` — `OllamaProvider` implementation connecting to native `/api/chat`, `/api/tags`, `/api/show` with NDJSON streaming, tool call extraction, JSON schema formatting, and usage metrics.
+- `packages/providers/src/openai-compatible.ts` — `OpenAICompatibleProvider` implementation connecting to standard `/v1/chat/completions` and `/v1/models` with SSE stream decoding, index-correlated tool assembly, Bearer authentication, and usage metrics.
+- `packages/providers/src/probes.ts` — `probeModelCapabilities` pipeline for testing streaming text, tool calling, and structured output adherence without state mutation.
+- `packages/providers/src/index.ts` — exported `OllamaProvider`, `OpenAICompatibleProvider`, `probeModelCapabilities`, `validateProviderEndpoint`, and legacy aliases.
+- `packages/providers/test/ollama.test.ts` — protocol tests for Ollama adapter against ephemeral in-process mock server (health, discovery, streaming, tools, schema, usage, loopback security).
+- `packages/providers/test/openai-compatible.test.ts` — protocol tests for OpenAI-compatible adapter against ephemeral in-process mock server (health, discovery, streaming, tools, loopback security).
+- `packages/providers/test/probes.test.ts` — unit tests for capability probing pipeline against mock providers.
+- `packages/providers/test/live-smoke.test.ts` — honest live Ollama integration check that checks `127.0.0.1:11434` without fabricating results, reporting BLOCKED if service is not running.
+- `docs/ARCHITECTURE.md` — documented native Ollama adapter, OpenAI-compatible adapter, capability probes, and privacy validation.
+- `docs/SECURITY.md` — documented Section 11 on provider endpoint policy, loopback enforcement, credential isolation, and model-directed endpoint restrictions.
+- `docs/PROJECT_MEMORY.md` — updated Step 08 progress and decision log.
+- `docs/PROGRESS.md` — this Step 08 record.
+
+### Verification commands and actual outcomes
+
+1. `pnpm check` (Composite gate) — Exit code 0.
+   - `pnpm lint` — Exit code 0. 0 errors, 0 warnings across all 7 packages.
+   - `pnpm typecheck` — Exit code 0. Strict TypeScript composite build passed without error.
+   - `pnpm test` — Exit code 0. 12 test suites, 78/78 tests passing:
+     - `packages/providers/test/provider.test.ts` (18 passed)
+     - `packages/providers/test/ollama.test.ts` (8 passed)
+     - `packages/providers/test/openai-compatible.test.ts` (6 passed)
+     - `packages/providers/test/probes.test.ts` (3 passed)
+     - `packages/providers/test/live-smoke.test.ts` (1 passed — honest BLOCKED status logged)
+     - `apps/server/test/security.test.ts` (17 passed)
+     - `apps/server/test/health.test.ts` (3 passed)
+     - `packages/core/test/core.test.ts` (8 passed)
+     - `packages/db/test/persistence.test.ts` (9 passed)
+     - `packages/db/test/db.test.ts` (1 passed)
+     - `apps/worker/test/worker.test.ts` (3 passed)
+     - `apps/web/test/app.test.tsx` (1 passed)
+   - `pnpm build` — Exit code 0. All packages and Vite web bundle compiled cleanly.
+
+### Live smoke check outcome
+
+- **Live Ollama Status:** `BLOCKED`
+- **Reason:** Local Ollama service is not running on `127.0.0.1:11434` (`ECONNREFUSED`), and no local model weights are present in `~/.ollama/models/manifests`.
+- **Exact tested model:** `not tested` (no installed models available).
+- **Compliance with Rule 9 ("NO-SERVICE FALLBACK"):** Open Dot Spell strictly refrained from downloading models, pulling weights, launching background daemons, or fabricating synthetic data as live evidence. Deterministic test suites verified 100% of the adapter code paths against in-process mock HTTP servers.
+
+### Known limitations/blockers
+
+- Live inference against real local weights requires manual startup of `ollama serve` and pulling a supported model by the user outside the agent run.
+- `docs/BUILD_GUIDE.md` remains absent from the repository.
+
+### Next step
+
+Step 09. Do not begin it until the next numbered prompt is supplied.

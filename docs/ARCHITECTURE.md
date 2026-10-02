@@ -682,6 +682,36 @@ Development, CI, and contract verification rely on `SyntheticTestProvider`:
 - Selectable deterministic scenarios: `normal_text`, `valid_tool_call`, `malformed_tool_args`, `interrupted_stream`, `timeout`, `cancellation`, `missing_usage`, and `unsupported_capability`.
 - Completely reproducible without network access, live Ollama, or remote APIs.
 
+### Real Inference Adapters (Implemented in Step 08)
+
+#### 1. Ollama Native Adapter (`OllamaProvider`)
+- **Protocol:** Communicates with local Ollama daemon via native HTTP endpoints (`/api/chat`, `/api/tags`, `/api/show`).
+- **Streaming Decoupling:** Decodes NDJSON chunks from `/api/chat` response body into normalized `ProviderEvent` stream.
+- **Tool Calling:** Emits `tool_call_start`, `tool_call_delta`, and `tool_call_complete` using `ToolCallStreamAssembler`.
+- **Structured Outputs:** Translates `responseFormat.schema` to Ollama's `format: { ... }` JSON schema constraint.
+- **Model Discovery & Capabilities:** Discovers locally installed models via `/api/tags` and probes parameters via `/api/show`.
+- **Usage Integrity:** Captures `prompt_eval_count` and `eval_count` when emitted by Ollama; preserves `null` if unmeasured.
+
+#### 2. OpenAI-Compatible Chat Adapter (`OpenAICompatibleProvider`)
+- **Protocol:** Standard `/v1/chat/completions` and `/v1/models` HTTP API.
+- **SSE Stream Decoding:** Parses Server-Sent Events (`data: {...}\n\n`) until `data: [DONE]`.
+- **Tool Call Correlation:** Accumulates incremental tool deltas by tool call index and correlates them via `ToolCallStreamAssembler`.
+- **Bearer Authentication:** Supports Bearer token authorization headers; scrubs credentials from all errors and logs.
+- **Usage Extraction:** Extracts token counts from `chunk.usage` when `stream_options.include_usage: true` is supported.
+
+#### 3. Capability Probing Pipeline (`probeModelCapabilities`)
+- Probes model behavior safely without mutating system state:
+  - Streaming check: Verifies incremental text token delivery.
+  - Tool calling check: Verifies structured tool invocation against a single diagnostic tool schema.
+  - Structured output check: Verifies adherence to a JSON schema constraint.
+- Generates immutable `ObservedModelCapabilities` snapshot tagged with runtime version and timestamp.
+
+#### 4. Local-Only Privacy Policy & Endpoint Validation (`validateProviderEndpoint`)
+- Enforces user privacy modes at the network boundary:
+  - `local_only` (default): Base URLs MUST resolve to loopback addresses (`127.0.0.1`, `::1`, or `localhost`). Non-loopback endpoints are rejected immediately before making any network request.
+  - `hybrid`: Remote endpoints permitted only when explicitly authorized by workspace owner settings.
+- Model proposals or untrusted data have zero authority to alter provider endpoints or privacy mode.
+
 ---
 
 ## 13. Artifact Model and Atomic Staging

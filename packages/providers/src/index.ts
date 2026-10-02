@@ -2,6 +2,10 @@ export * from "./types.js";
 export * from "./errors.js";
 export * from "./assembler.js";
 export * from "./synthetic.js";
+export * from "./policy.js";
+export * from "./probes.js";
+export * from "./ollama.js";
+export * from "./openai-compatible.js";
 
 import {
   type ModelProviderAdapter,

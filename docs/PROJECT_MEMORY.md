@@ -112,14 +112,18 @@ Models, webpages, files, MCP servers, tool descriptions, and external content ca
 ## 8. Current Progress
 
 ```text
-Step: 07
-Behavior delivered: Provider-neutral streaming event contract, safe tool argument assembly, capability model distinguishing protocol from observed capabilities, explicit null usage semantics, normalized error classification, and deterministic synthetic test provider
-Files changed: packages/providers/src/types.ts, packages/providers/src/errors.ts, packages/providers/src/assembler.ts, packages/providers/src/synthetic.ts, packages/providers/src/index.ts, packages/providers/package.json, packages/providers/test/contract-suite.ts, packages/providers/test/provider.test.ts, packages/core/src/index.ts, apps/server/test/security.test.ts, docs/ARCHITECTURE.md, docs/PROJECT_MEMORY.md, docs/PROGRESS.md
+Step: 08
+Behavior delivered: Connected Ollama native adapter (/api/chat, /api/tags, /api/show) and OpenAI-compatible adapter (/v1/chat/completions, /v1/models) to ModelProviderAdapter, capability probing pipeline (probeModelCapabilities), loopback privacy policy enforcement (validateProviderEndpoint), NDJSON & SSE stream decoders, tool call assembly, explicit null token usage semantics, and honest live smoke check with BLOCKED status reporting.
+Files changed: packages/providers/src/policy.ts, packages/providers/src/ollama.ts, packages/providers/src/openai-compatible.ts, packages/providers/src/probes.ts, packages/providers/src/index.ts, packages/providers/test/ollama.test.ts, packages/providers/test/openai-compatible.test.ts, packages/providers/test/probes.test.ts, packages/providers/test/live-smoke.test.ts, docs/ARCHITECTURE.md, docs/SECURITY.md, docs/PROJECT_MEMORY.md, docs/PROGRESS.md
 Verification commands and actual outcomes:
 - pnpm lint (code 0; 0 errors across all 7 packages)
 - pnpm typecheck (code 0; strict composite build verified)
-- pnpm test (code 0; 8 test suites, 60/60 tests passed)
-  - packages/providers/test/provider.test.ts (18 passed: 11 contract tests + 5 assembler tests + 1 redaction test + 1 stub test)
+- pnpm test (code 0; 12 test suites, 78/78 tests passed)
+  - packages/providers/test/provider.test.ts (18 passed)
+  - packages/providers/test/ollama.test.ts (8 passed)
+  - packages/providers/test/openai-compatible.test.ts (6 passed)
+  - packages/providers/test/probes.test.ts (3 passed)
+  - packages/providers/test/live-smoke.test.ts (1 passed — honest BLOCKED status logged)
   - apps/server/test/security.test.ts (17 passed)
   - apps/server/test/health.test.ts (3 passed)
   - packages/core/test/core.test.ts (8 passed)
@@ -129,8 +133,10 @@ Verification commands and actual outcomes:
   - apps/web/test/app.test.tsx (1 passed)
 - pnpm build (code 0; all packages and apps compiled cleanly)
 - pnpm check (code 0; composite verification gate passed)
-Known limitations/blockers: Real model inference and live Ollama connectivity are intentionally deferred to Step 08.
-Next step: Step 08
+Live Ollama Smoke Check:
+- Live Ollama Status: BLOCKED (Ollama daemon not running on 127.0.0.1:11434; no local model weights present). No mock data fabricated; deterministic suites passed with in-process mock HTTP servers.
+Known limitations/blockers: Live local inference requires manual startup of `ollama serve` and model pulling outside the agent run.
+Next step: Step 09
 ```
 
 ## 9. Decision Log
@@ -151,6 +157,7 @@ Next step: Step 08
 | 2026-10-03 | Enforce strict relational schema with sequence numbers for message/event ordering, non-destructive migrations, atomic state+event batches, and SQLite safety pragmas (FK, WAL, busy_timeout). | Step 05 durable storage and migrations specification. | Adopted |
 | 2026-10-03 | Enforce loopback-only binding, single-owner pairing flow with 15m expiry/max 5 attempts, HttpOnly SameSite=Strict session cookies, Host & Origin gatekeeping, 1MB body limit, workspace scoping checks, and AES-256-GCM encrypted provider credentials. | Step 06 local access and credential protection specification. | Adopted |
 | 2026-10-03 | Establish provider-neutral ModelProviderAdapter contract with normalized streaming events (preserving exact model ID and tool correlation tokens), ToolCallStreamAssembler for safe partial argument accumulation, explicit null usage semantics, capability tri-state, normalized ProviderError categories, and SyntheticTestProvider test double. | Step 07 provider contract and test provider specification. | Adopted |
+| 2026-10-03 | Implement Ollama native adapter (/api/chat) and OpenAI-compatible adapter (/v1/chat/completions) with NDJSON/SSE streaming, tool assembly, JSON schema mapping, probeModelCapabilities pipeline, loopback endpoint validation (local_only mode), and honest live service fallback without fabricated results. | Step 08 Ollama and compatible provider connection specification. | Adopted |
 
 Future decisions should include the date, the concrete decision, its evidence or rationale, and its current status. Update this memory after each numbered step with only behavior that has actually been verified.
 

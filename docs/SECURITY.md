@@ -246,3 +246,28 @@ To avoid security theater, Open Dot Spell is explicit about what its local secur
 3. **Multi-User Host Separation:**
    - Open Dot Spell is a single-owner application. It does not provide multi-tenant Unix isolation between different local user accounts beyond standard POSIX file permissions (`0600`).
 
+---
+
+## 11. Provider Endpoint Policy and Privacy Boundaries (Documented in Step 08)
+
+To enforce the local-first security architecture and protect user data from unintended external exfiltration:
+
+### 1. Loopback Enforcement by Default (`local_only` Mode)
+- The system defaults to `privacyMode: "local_only"`.
+- In `local_only` mode, all provider base URLs are validated by `validateProviderEndpoint` before any network connection is attempted.
+- The URL hostname must resolve strictly to loopback addresses: `127.0.0.1`, `::1`, or `localhost`.
+- Any non-loopback IP address, private LAN address (e.g. `192.168.x.x`), or external public domain is rejected synchronously with an `authentication_failure` / privacy policy error.
+
+### 2. Explicit Opt-In for Remote Providers (`hybrid` Mode)
+- Remote endpoints (e.g. cloud OpenAI-compatible endpoints) are permitted **only** when the user explicitly sets `privacyMode: "hybrid"` in system configuration.
+- The system never silently falls back from local to remote inference.
+
+### 3. Prohibition of Model-Directed Endpoint Changes
+- Model outputs, ingested prompt text, tool schemas, or workspace repository files have **zero authority** to alter provider endpoints or privacy mode configurations.
+- Provider configuration is server-side and user-controlled only.
+
+### 4. Credential Isolation and Redaction
+- Provider API keys and Bearer tokens are stored encrypted at rest using AES-256-GCM.
+- Secrets are never emitted in API responses, server logs, or event streams.
+- `ProviderError` automatically passes error strings and diagnostic payloads through `redactSensitiveData` to scrub any embedded credentials or authorization headers.
+
