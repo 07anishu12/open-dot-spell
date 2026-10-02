@@ -488,4 +488,64 @@ Implement persistent conversation and message lifecycle APIs, transactional turn
 
 ### Next step
 
-Step 10. Do not begin it until the next numbered prompt is supplied.
+Step 10 complete. Do not begin Step 11 until explicitly assigned.
+
+## Step 10 — Build the usable chat and setup interface
+
+**Status:** Completed. All UI components, state management, SSE streaming, provider discovery, setup/pairing modal, security sanitization, and 10 UI tests verified.
+
+### Objective
+
+Build the initial usable interface over real backend APIs (setup/pairing flow, provider health/status, Ollama model discovery, model selection with persistence, conversation sidebar/history, message composer, SSE streaming response, reconnect to active run, reload existing conversation after refresh, run UI state badges, semantic accessible HTML, sanitized Markdown rendering).
+
+### Files changed
+
+- `apps/server/src/app.ts` — added endpoints `GET /api/workspaces` (with default workspace auto-initialization), `GET /api/providers/status` (querying provider health status), and `GET /api/providers/models` (querying discovered local Ollama models).
+- `apps/server/src/index.ts` — instantiated and started `WorkerProcess` alongside the HTTP server so background inference execution runs automatically.
+- `apps/web/src/components/PairingModal.tsx` — single-owner pairing and setup flow with accessible secret input, visibility toggle, error display, and pairing token persistence.
+- `apps/web/src/components/Sidebar.tsx` — conversation history list with timestamps, active state indication, new chat button, model discovery selector with localStorage persistence, and live Ollama reachability indicator with latency/offline guidance.
+- `apps/web/src/components/Composer.tsx` — message composer with auto-resize textarea, Enter to send, Shift+Enter for multiline newline, and stop generation button when stream is active.
+- `apps/web/src/components/ChatView.tsx` — active chat timeline with message roles (You / Open Dot Spell), timestamps, streaming cursor, run state status badges (queued, responding, complete, interrupted, failed), and empty conversation states.
+- `apps/web/src/components/MarkdownView.tsx` — safe, React-based Markdown parser with code blocks, inline code, lists, blockquotes, and strict URL scheme validation blocking `javascript:`, `data:`, `vbscript:` without `dangerouslySetInnerHTML`.
+- `apps/web/src/utils/sse.ts` — reconnectable SSE stream consumer parsing event frames (`run_started`, `text_delta`, `message_completed`, `run_completed`, `run_failed`, `done`) with cursor tracking.
+- `apps/web/src/styles.css` — high-contrast, WCAG AA compliant theme with dark mode variables, visible focus outlines, accessible button states, and responsive drawer layout for mobile viewports (`<= 768px`).
+- `apps/web/src/App.tsx` — central application controller wiring authentication check, workspace loading, model selection, conversation CRUD, message turn submission, and SSE streaming subscription.
+- `apps/web/test/app.test.tsx` — comprehensive UI test suite (10 tests) verifying pairing, initial empty state, offline provider banner, message streaming via SSE, markdown link/script sanitization, conversation reload after refresh, error states, keyboard navigation, mobile menu toggle, and stream interrupt.
+- `docs/PROGRESS.md` — this Step 10 record.
+
+### Verification commands and actual outcomes
+
+1. `pnpm check` (Composite gate) — Exit code 0.
+   - `pnpm lint` — Exit code 0. 0 errors, 0 warnings across all 7 workspace packages.
+   - `pnpm typecheck` — Exit code 0. Strict TypeScript composite build passed across all projects.
+   - `pnpm test` — Exit code 0. 13 test suites, 101/101 tests passing:
+     - `apps/web/test/app.test.tsx` (10 passed)
+     - `apps/server/test/conversations-stream.test.ts` (14 passed)
+     - `apps/server/test/security.test.ts` (17 passed)
+     - `apps/server/test/health.test.ts` (3 passed)
+     - `packages/providers/test/provider.test.ts` (18 passed)
+     - `packages/providers/test/ollama.test.ts` (8 passed)
+     - `packages/providers/test/openai-compatible.test.ts` (6 passed)
+     - `packages/providers/test/probes.test.ts` (3 passed)
+     - `packages/providers/test/live-smoke.test.ts` (1 passed — honest BLOCKED status logged)
+     - `packages/core/test/core.test.ts` (8 passed)
+     - `packages/db/test/persistence.test.ts` (9 passed)
+     - `packages/db/test/db.test.ts` (1 passed)
+     - `apps/worker/test/worker.test.ts` (3 passed)
+   - `pnpm build` — Exit code 0. All packages and Vite production bundle compiled cleanly.
+
+### Real Ollama Check Outcome
+
+- **Real Ollama Check:** `BLOCKED`
+- **Reason:** Local Ollama daemon is offline on `127.0.0.1:11434` (connection refused; `curl http://127.0.0.1:11434/api/tags` returned `OLLAMA_OFFLINE`).
+- **Reporting Compliance:** Per `AGENTS.md`, success is not fabricated when the live daemon is offline. Deterministic testing with `SyntheticTestProvider` verified all interactive flows, streaming, error banners, and markdown sanitization.
+
+### Known limitations/blockers
+
+- Live local model inference requires starting `ollama serve` and pulling a supported model outside the agent run.
+- Single-worker concurrency remains provisional (to be generalized in Step 18).
+
+### Next step
+
+Step 11. Do not begin until the next numbered prompt is supplied.
+

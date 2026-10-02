@@ -27,7 +27,7 @@ import {
   getRun,
   getRunEventsAfterCursor
 } from "@open-dot-spell/db";
-import { OllamaProviderStub } from "@open-dot-spell/providers";
+import { OllamaProviderStub, OllamaProvider, type ModelProviderAdapter } from "@open-dot-spell/providers";
 import { WorkerProcess } from "@open-dot-spell/worker";
 import { AuthManager } from "./auth.js";
 
@@ -43,6 +43,7 @@ export interface AppOptions {
   worker?: WorkerProcess;
   eventBus?: RunEventBus;
   sseHeartbeatMs?: number;
+  provider?: ModelProviderAdapter;
 }
 
 export function buildApp(options: AppOptions = {}): FastifyInstance {
@@ -238,8 +239,65 @@ export function buildApp(options: AppOptions = {}): FastifyInstance {
   });
 
   // ==========================================
-  // Conversation & Message APIs (Step 09)
+  // Workspace & Conversation APIs
   // ==========================================
+
+  // List workspaces or auto-ensure default workspace exists
+  app.get(
+    "/api/workspaces",
+    { preHandler: requireOwnerAuth },
+    async (_request, reply) => {
+      if (!options.db) {
+        return reply.code(500).send({ error: "Database not configured" });
+      }
+
+      const wsRes = await options.db.client.execute("SELECT * FROM workspaces ORDER BY created_at ASC;");
+      if (wsRes.rows.length === 0) {
+        const now = new Date().toISOString();
+        const defaultWs = {
+          id: "ws_default",
+          name: "Local Workspace",
+          rootPath: process.cwd(),
+          allowedGlobs: "[]",
+          deniedGlobs: "[]",
+          createdAt: now,
+          updatedAt: now
+        };
+        await options.db.client.execute({
+          sql: `INSERT INTO workspaces (id, name, root_path, allowed_globs, denied_globs, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?);`,
+          args: [
+            defaultWs.id,
+            defaultWs.name,
+            defaultWs.rootPath,
+            defaultWs.allowedGlobs,
+            defaultWs.deniedGlobs,
+            defaultWs.createdAt,
+            defaultWs.updatedAt
+          ]
+        });
+        return reply.code(200).send({
+          workspaces: [defaultWs],
+          activeWorkspaceId: defaultWs.id
+        });
+      }
+
+      const workspacesList = wsRes.rows.map((row) => ({
+        id: String(row["id"]),
+        name: String(row["name"]),
+        rootPath: String(row["root_path"]),
+        allowedGlobs: String(row["allowed_globs"]),
+        deniedGlobs: String(row["denied_globs"]),
+        createdAt: String(row["created_at"]),
+        updatedAt: String(row["updated_at"])
+      }));
+
+      return reply.code(200).send({
+        workspaces: workspacesList,
+        activeWorkspaceId: workspacesList[0].id
+      });
+    }
+  );
 
   // Create conversation
   app.post<{
@@ -662,6 +720,52 @@ export function buildApp(options: AppOptions = {}): FastifyInstance {
         configured: true,
         message: "Local inference is fully functional with zero remote credentials"
       });
+    }
+  );
+
+  // Protected provider endpoint: check provider health & connectivity
+  app.get(
+    "/api/providers/status",
+    { preHandler: requireOwnerAuth },
+    async (_request, reply) => {
+      const provider =
+        options.provider ??
+        new OllamaProvider({ privacyMode: options.privacyMode ?? "local_only" });
+      const health = await provider.checkHealth();
+      return reply.code(200).send({
+        providerId: provider.providerId,
+        providerType: provider.providerType,
+        isLocal: provider.isLocal,
+        privacyMode: options.privacyMode ?? "local_only",
+        reachable: health.reachable,
+        latencyMs: health.latencyMs,
+        error: health.error
+      });
+    }
+  );
+
+  // Protected provider endpoint: discover installed models
+  app.get(
+    "/api/providers/models",
+    { preHandler: requireOwnerAuth },
+    async (_request, reply) => {
+      const provider =
+        options.provider ??
+        new OllamaProvider({ privacyMode: options.privacyMode ?? "local_only" });
+      try {
+        const models = await provider.discoverModels();
+        return reply.code(200).send({
+          providerId: provider.providerId,
+          models
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.code(200).send({
+          providerId: provider.providerId,
+          models: [],
+          error: message
+        });
+      }
     }
   );
 

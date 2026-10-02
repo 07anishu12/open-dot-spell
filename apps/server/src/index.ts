@@ -1,6 +1,7 @@
 import { buildApp } from "./app.js";
 import { AuthManager } from "./auth.js";
 import { createDatabaseClient } from "@open-dot-spell/db";
+import { WorkerProcess } from "@open-dot-spell/worker";
 
 const PORT = Number(process.env["PORT"] || 3000);
 const HOST = process.env["HOST"] || "127.0.0.1";
@@ -22,7 +23,11 @@ const db = await createDatabaseClient();
 const authManager = new AuthManager();
 const pairingSecret = authManager.getPairingSecretForBootstrap();
 
-const app = buildApp({ db, authManager });
+// Initialize and start decoupled background worker for inference
+const worker = new WorkerProcess({ db });
+await worker.start();
+
+const app = buildApp({ db, authManager, worker });
 
 app.listen({ port: PORT, host: HOST }, (err, address) => {
   if (err) {
