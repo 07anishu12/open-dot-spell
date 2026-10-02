@@ -124,8 +124,9 @@ Verification commands and actual outcomes:
 - pnpm check (code 0; full lint, typecheck, test, and build pipeline verified)
 - curl GET http://127.0.0.1:3000/api/health (code 0; returned {"status":"healthy","version":"0.1.0-alpha","privacy_mode":"local_only","database":"connected","worker":"active"})
 - Worker process start/stop (code 0; logged startup and standby, cleanly released on SIGINT/SIGTERM)
-Known limitations/blockers: docs/BUILD_GUIDE.md remains absent; Ollama and Docker services were not active; no task execution or chat orchestration is implemented yet.
-Next step: Step 05
+- Persistence integration tests (code 0; 7 tests verified fresh migration, repeated migration, restart persistence, foreign keys, migration rollback on failure, atomic state+event transition, concurrent writes)
+Known limitations/blockers: docs/BUILD_GUIDE.md remains absent; Ollama and Docker services were not active; chat engine, agent loop, and task queues remain deferred to subsequent steps.
+Next step: Step 06
 ```
 
 ## 9. Decision Log
@@ -143,5 +144,6 @@ Next step: Step 05
 | 2026-10-02 | Require isolated container sandbox for code execution; prohibit host shell execution. | ADR 0005; host security and credential containment. | Adopted |
 | 2026-10-02 | Establish pnpm monorepo with apps/ (web, server, worker) and packages/ (core, db, providers) using strict TypeScript and LibSQL driver for Drizzle. | Step 04 runnable scaffold; cross-platform driver compatibility on Node 26. | Adopted |
 | 2026-10-02 | Adopt Persistent Git / GitHub Rule: every completed step requires focused commit, verification, push to origin, and structured report. | User instruction; repository traceability and synchronization. | Adopted |
+| 2026-10-03 | Enforce strict relational schema with sequence numbers for message/event ordering, non-destructive migrations, atomic state+event batches, and SQLite safety pragmas (FK, WAL, busy_timeout). | Step 05 durable storage and migrations specification. | Adopted |
 
 Future decisions should include the date, the concrete decision, its evidence or rationale, and its current status. Update this memory after each numbered step with only behavior that has actually been verified.

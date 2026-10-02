@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { WorkerProcess } from "../src/worker.js";
+import { createDatabaseClient } from "@open-dot-spell/db";
 
 describe("Worker lifecycle tests", () => {
   it("starts cleanly, reports ready status, and shuts down cleanly", async () => {
@@ -20,6 +21,17 @@ describe("Worker lifecycle tests", () => {
     expect(worker.getStatus()).toBe("ready");
 
     await worker.stop();
+    await worker.stop();
+    expect(worker.getStatus()).toBe("stopped");
+  });
+
+  it("initializes and closes cleanly when connected to database", async () => {
+    const db = await createDatabaseClient({ dbPath: ":memory:" });
+    const worker = new WorkerProcess(db);
+
+    await worker.start();
+    expect(worker.getStatus()).toBe("ready");
+
     await worker.stop();
     expect(worker.getStatus()).toBe("stopped");
   });

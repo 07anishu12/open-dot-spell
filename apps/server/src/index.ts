@@ -1,14 +1,18 @@
 import { buildApp } from "./app.js";
+import { createDatabaseClient } from "@open-dot-spell/db";
 
 const PORT = Number(process.env["PORT"] || 3000);
 const HOST = process.env["HOST"] || "127.0.0.1";
 
-const app = buildApp();
+// Initialize database with automated migrations
+const db = await createDatabaseClient();
+
+const app = buildApp({ db });
 
 app.listen({ port: PORT, host: HOST }, (err, address) => {
   if (err) {
     console.error("Failed to start Open Dot Spell API server:", err);
     process.exit(1);
   }
-  console.log(`Open Dot Spell API listening on ${address}`);
+  console.log(`Open Dot Spell API listening on ${address} (database: ${db.dbPath})`);
 });

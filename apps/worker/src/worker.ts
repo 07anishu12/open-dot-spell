@@ -1,8 +1,12 @@
+import type { DatabaseInstance } from "@open-dot-spell/db";
+
 export type WorkerStatus = "stopped" | "starting" | "ready" | "stopping";
 
 export class WorkerProcess {
   private status: WorkerStatus = "stopped";
   private shutdownHandlersAttached = false;
+
+  constructor(private readonly db?: DatabaseInstance) {}
 
   getStatus(): WorkerStatus {
     return this.status;
@@ -13,8 +17,11 @@ export class WorkerProcess {
       return;
     }
     this.status = "starting";
-    // At Step 04, the worker initializes its lifecycle without claiming tasks.
-    // Durable execution and task polling are deliberately deferred to future steps.
+    // Verify database connectivity if instance was provided
+    if (this.db) {
+      await this.db.client.execute("SELECT 1;");
+    }
+    // Standby mode: task claiming is deferred to future steps
     this.status = "ready";
   }
 
@@ -23,7 +30,9 @@ export class WorkerProcess {
       return;
     }
     this.status = "stopping";
-    // Perform clean resource release
+    if (this.db) {
+      await this.db.close();
+    }
     this.status = "stopped";
   }
 

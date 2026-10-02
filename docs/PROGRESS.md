@@ -181,6 +181,66 @@ Establish the minimal monorepo structure (`apps/web`, `apps/server`, `apps/worke
 
 ### Next step
 
-Step 05. Do not begin it until the next numbered prompt is supplied.
+Step 05.
+
+## Step 05 — Add Durable Storage and Migrations
+
+**Status:** Implementation complete and verified. Durable SQLite persistence layer, migrations, and consistency verification operational.
+
+### Objective
+
+Implement the durable local SQLite persistence layer using the agreed Drizzle ORM and LibSQL client, enforce safety pragmas (FK, WAL, busy timeout), implement initial relational schemas (Workspace, Conversation, Message, Run, RunEvent), establish deterministic sequence ordering for messages and events, create non-destructive migrations, implement atomic state+event transitions, verify restart persistence and concurrency handling, and document backup and storage boundary designs.
+
+### Files changed
+
+- `packages/db/src/schema.ts` — initial schema definitions (`workspaces`, `conversations`, `messages`, `runs`, `run_events`) with foreign keys, unique sequence indices, and status enums.
+- `packages/db/src/migrations.ts` — versioned migration registry, migration runner (`runMigrations`), and diagnostic error handling (`MigrationError`).
+- `packages/db/src/config.ts` — centralized connection factory (`createDatabaseClient`), path resolution, and safety pragmas.
+- `packages/db/src/queries.ts` — deterministic message/event ordering queries, atomic `transitionRunStatusWithEvent` transaction helper, and bounded lock retry.
+- `packages/db/src/index.ts` — unified exports for packages/db.
+- `packages/db/test/persistence.test.ts` — comprehensive 7-point persistence integration test suite.
+- `packages/db/test/db.test.ts` — updated basic initialization test.
+- `apps/server/src/app.ts` & `index.ts` — integrated database health check and automated migrations into server.
+- `apps/server/test/health.test.ts` — verified server health response with active database client.
+- `apps/worker/src/worker.ts` & `index.ts` — integrated database connectivity into worker lifecycle.
+- `apps/worker/test/worker.test.ts` — verified worker lifecycle with active database client.
+- `docs/BACKUP_DESIGN.md` — SQLite online backup design (`VACUUM INTO`), WAL safety, storage locations, and retention policy.
+- `docs/STORAGE.md` — storage boundaries (SQLite metadata vs filesystem blobs), single-host model, and safety pragmas.
+- `docs/PROGRESS.md` — this Step 05 record.
+- `docs/PROJECT_MEMORY.md` — updated Step 05 progress and decision log.
+
+### Verification commands and actual outcomes
+
+1. `pnpm check` (Composite gate) — Exit code 0.
+   - `pnpm lint` — Exit code 0. 0 errors or warnings across all projects.
+   - `pnpm typecheck` — Exit code 0. Strict TypeScript composite project check passed.
+   - `pnpm test` — Exit code 0. 7 test suites, 20/20 tests passed:
+     - `packages/db/test/persistence.test.ts` (7 passed: fresh migration, repeated migration, restart persistence, foreign keys, migration rollback, atomic state+event, concurrent writes)
+     - `packages/db/test/db.test.ts` (1 passed)
+     - `packages/core/test/core.test.ts` (4 passed)
+     - `packages/providers/test/provider.test.ts` (1 passed)
+     - `apps/server/test/health.test.ts` (3 passed)
+     - `apps/worker/test/worker.test.ts` (3 passed)
+     - `apps/web/test/app.test.tsx` (1 passed)
+   - `pnpm build` — Exit code 0. All packages and apps built cleanly in 0.85s.
+
+### Manual verification
+
+- Verified deterministic message ordering across simulated process restarts.
+- Verified foreign keys are actively enforced by SQLite (`PRAGMA foreign_keys = ON;`).
+- Verified failing migrations trigger rollback and leave existing tables and data intact.
+- Verified atomic consistency: Run status update and RunEvent either both commit or neither commits.
+- Verified bounded concurrent writes using lock retry with backoff.
+
+### Known limitations/blockers
+
+- `docs/BUILD_GUIDE.md` remains absent from the repository.
+- Full backup execution CLI and restore UI are deferred to later operational milestones.
+- Conversation chat loops and durable task queues remain deferred to subsequent implementation steps.
+
+### Next step
+
+Step 06. Do not begin it until the next numbered prompt is supplied.
+
 
 

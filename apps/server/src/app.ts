@@ -2,10 +2,13 @@ import Fastify, { FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import { HealthResponse } from "@open-dot-spell/core";
 
+import type { DatabaseInstance } from "@open-dot-spell/db";
+
 export interface AppOptions {
   privacyMode?: "local_only" | "hybrid" | "offline";
   databaseStatus?: "connected" | "disconnected";
   workerStatus?: "active" | "standby" | "stopped";
+  db?: DatabaseInstance;
 }
 
 export function buildApp(options: AppOptions = {}): FastifyInstance {
@@ -40,11 +43,21 @@ export function buildApp(options: AppOptions = {}): FastifyInstance {
 
   // Health endpoint
   app.get<{ Reply: HealthResponse }>("/api/health", async (_request, reply) => {
+    let dbStatus = options.databaseStatus ?? "connected";
+    if (options.db) {
+      try {
+        await options.db.client.execute("SELECT 1;");
+        dbStatus = "connected";
+      } catch {
+        dbStatus = "disconnected";
+      }
+    }
+
     const response: HealthResponse = {
       status: "healthy",
       version: "0.1.0-alpha",
       privacy_mode: options.privacyMode ?? "local_only",
-      database: options.databaseStatus ?? "connected",
+      database: dbStatus,
       worker: options.workerStatus ?? "active"
     };
     return reply.code(200).send(response);
