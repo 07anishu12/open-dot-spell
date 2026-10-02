@@ -112,12 +112,12 @@ Models, webpages, files, MCP servers, tool descriptions, and external content ca
 ## 8. Current Progress
 
 ```text
-Step: 02
-Behavior delivered: Product definition and reference feature map
-Files changed: docs/PRD.md, docs/REFERENCE_MAP.md, docs/PROJECT_MEMORY.md, docs/PROGRESS.md
-Verification: Documentation-only step. Verified PRD.md and REFERENCE_MAP.md completeness, internal consistency, absence of fabricated references or unsupported claims, explicit conceptual chain, and verified that no application code was implemented.
-Known limitations: docs/BUILD_GUIDE.md and AGENTS.md are absent; no application scaffold, package manifest, or lockfile exists; pnpm is unavailable; Ollama and Docker local services were not running; reference projects were inspected via public records only, not executed or deployed.
-Next step: Step 03
+Step: 03
+Behavior delivered: Architecture, security, state, contracts, and failure model
+Files changed: docs/ARCHITECTURE.md, docs/SECURITY.md, docs/decisions/0001-sqlite-as-initial-persistence.md, docs/decisions/0002-separate-worker-process.md, docs/decisions/0003-local-inference-as-default.md, docs/decisions/0004-server-side-tool-policy.md, docs/decisions/0005-isolated-code-execution.md, docs/PROJECT_MEMORY.md, docs/PROGRESS.md
+Verification: Documentation consistency review. Cross-checked ARCHITECTURE.md, SECURITY.md, and ADRs against PRD.md, REFERENCE_MAP.md, and PROJECT_MEMORY.md. Verified explicit trust boundaries, at-least-once task execution, cryptographic approval fingerprinting, state machine completeness, and no speculative microservice infrastructure. No application code was implemented.
+Known limitations: docs/BUILD_GUIDE.md and AGENTS.md remain absent; no application scaffold, package manifest, or lockfile exists; pnpm is unavailable; Ollama and Docker local services were not running; all contracts and state machines remain design specifications pending future implementation steps.
+Next step: Step 04
 ```
 
 ## 9. Decision Log
@@ -128,6 +128,10 @@ Next step: Step 03
 | 2026-10-02 | Use local inference by default, with Ollama as the initial runtime and open/local models as the target ecosystem. | Product vision and local-first requirement. | Adopted |
 | 2026-10-02 | Follow the supplied 40-step sequence one prompt at a time; do not implement future steps speculatively. | Repository workflow requirement. | Adopted |
 | 2026-10-02 | Model durable work as Responsibility → Goal → Plan → Task → Run → Tool Action → Evidence → Artifact, with the first usable release boundary after Step 20. | Step 02 PRD and product vision. | Adopted |
-|  |  |  |  |
+| 2026-10-02 | Use embedded SQLite with WAL mode as initial persistence store. | ADR 0001; laptop-sized, zero-infrastructure local storage. | Adopted |
+| 2026-10-02 | Decouple durable task execution into a separate worker with transactional leasing. | ADR 0002; survive UI reloads and server restarts. | Adopted |
+| 2026-10-02 | Maintain local inference as default with Ollama; remote providers are explicit opt-in. | ADR 0003; privacy and local-first product requirement. | Adopted |
+| 2026-10-02 | Enforce server-side tool policy with immutable SHA-256 action fingerprinting for approvals. | ADR 0004; protect host against prompt injection and tampering. | Adopted |
+| 2026-10-02 | Require isolated container sandbox for code execution; prohibit host shell execution. | ADR 0005; host security and credential containment. | Adopted |
 
 Future decisions should include the date, the concrete decision, its evidence or rationale, and its current status. Update this memory after each numbered step with only behavior that has actually been verified.

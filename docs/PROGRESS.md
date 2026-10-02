@@ -76,4 +76,48 @@ Define Open Dot Spell as a single-owner, local-first personal AI assistant; spec
 
 ### Next step
 
-Step 03. Do not begin it until the next numbered prompt is supplied.
+Step 03.
+
+## Step 03 — Architecture, security, state, contracts, and failure model
+
+**Status:** Documentation complete; system design established. No application functionality implemented.
+
+### Objective
+
+Define the laptop-sized local-first system architecture, trust boundaries, minimum domain entities, explicit state machines, evidence-based completion semantics, durable execution leasing, failure recovery matrix, approval model, tool policy matrix, local API contracts, provider streaming contracts, artifact atomic staging, sandbox execution constraints, and architectural decision records (ADRs).
+
+### Files changed
+
+- `docs/ARCHITECTURE.md` — complete system architecture, component roles, trust boundaries, domain model, state machines, durable worker leases, failure recovery matrix, tool policy, local API specifications, provider streaming contracts, atomic artifact staging, sandbox limits, resource budgets, and Mermaid diagrams.
+- `docs/SECURITY.md` — threat model, localhost protection, session auth, Host/Origin validation, credential isolation, path traversal guards, container sandbox boundaries, approval fingerprinting, and prompt injection mitigations.
+- `docs/decisions/0001-sqlite-as-initial-persistence.md` — ADR for embedded SQLite with WAL mode.
+- `docs/decisions/0002-separate-worker-process.md` — ADR for decoupled background worker with leasing and fencing tokens.
+- `docs/decisions/0003-local-inference-as-default.md` — ADR for local inference default with Ollama.
+- `docs/decisions/0004-server-side-tool-policy.md` — ADR for server-side policy and immutable action fingerprints.
+- `docs/decisions/0005-isolated-code-execution.md` — ADR for container sandbox code execution.
+- `docs/PROJECT_MEMORY.md` — recorded Step 03 progress, verification, and ADR decisions in the decision log.
+- `docs/PROGRESS.md` — this Step 03 record.
+
+### Verification
+
+- Documentation consistency review.
+- Cross-checked `docs/ARCHITECTURE.md` and `docs/SECURITY.md` against `docs/PRD.md`, `docs/REFERENCE_MAP.md`, and `docs/PROJECT_MEMORY.md`.
+- Confirmed that recovery and state machines do not rely on hidden chat history or client-side assumptions.
+- Confirmed that approval bindings use immutable SHA-256 fingerprints to prevent parameter tampering.
+- Confirmed explicit statement that Open Dot Spell provides at-least-once task execution and does NOT claim general exactly-once external side effects.
+- Confirmed no speculative infrastructure (PostgreSQL, Kafka, Redis, Kubernetes, microservices) was introduced.
+- Verified all Mermaid diagrams adhere to supported diagram types and syntax.
+- Confirmed no application code, dependencies, or running services were introduced.
+
+### Known limitations
+
+- `docs/BUILD_GUIDE.md` and `AGENTS.md` remain absent from the repository.
+- No application scaffold, package manifest, or lockfile exists yet.
+- pnpm is not installed on the system; Node 26 is installed rather than Node 24 LTS.
+- Ollama and Docker local services were not running during this step.
+- All contracts, schemas, and state machines are design specifications and have not been executed or tested in code.
+
+### Next step
+
+Step 04. Do not begin it until the next numbered prompt is supplied.
+
