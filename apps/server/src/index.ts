@@ -2,6 +2,7 @@ import { buildApp } from "./app.js";
 import { AuthManager } from "./auth.js";
 import { createDatabaseClient } from "@open-dot-spell/db";
 import { WorkerProcess } from "@open-dot-spell/worker";
+import { RunEventBus } from "@open-dot-spell/core";
 
 const PORT = Number(process.env["PORT"] || 3000);
 const HOST = process.env["HOST"] || "127.0.0.1";
@@ -23,11 +24,14 @@ const db = await createDatabaseClient();
 const authManager = new AuthManager();
 const pairingSecret = authManager.getPairingSecretForBootstrap();
 
+// Shared event bus for live worker inference events and SSE subscribers
+const eventBus = new RunEventBus();
+
 // Initialize and start decoupled background worker for inference
-const worker = new WorkerProcess({ db });
+const worker = new WorkerProcess({ db, eventBus });
 await worker.start();
 
-const app = buildApp({ db, authManager, worker });
+const app = buildApp({ db, authManager, worker, eventBus });
 
 app.listen({ port: PORT, host: HOST }, (err, address) => {
   if (err) {

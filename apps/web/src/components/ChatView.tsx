@@ -15,6 +15,7 @@ export type RunUIState = "idle" | "queued" | "responding" | "complete" | "interr
 interface ChatViewProps {
   conversationTitle?: string;
   modelId?: string;
+  privacyMode?: string;
   messages: ChatMessage[];
   runState: RunUIState;
   errorMessage?: string | null;
@@ -26,6 +27,7 @@ interface ChatViewProps {
 export function ChatView({
   conversationTitle,
   modelId,
+  privacyMode = "local_only",
   messages,
   runState,
   errorMessage,
@@ -62,9 +64,20 @@ export function ChatView({
         </div>
 
         <div className="ods-header-right">
-          <div className="ods-privacy-indicator" title="All prompts and inference remain strictly local on loopback">
+          <div
+            className="ods-privacy-indicator"
+            title={
+              privacyMode === "local_only"
+                ? "All prompts and inference remain strictly local on loopback"
+                : privacyMode === "hybrid"
+                  ? "Hybrid execution mode enabled"
+                  : "Local execution"
+            }
+          >
             <span className="ods-privacy-lock-icon" aria-hidden="true">🔒</span>
-            <span className="ods-privacy-text">Local Loopback</span>
+            <span className="ods-privacy-text">
+              {privacyMode === "hybrid" ? "Hybrid Mode" : privacyMode === "offline" ? "Offline Mode" : "Local Loopback"}
+            </span>
           </div>
         </div>
       </header>
@@ -73,6 +86,12 @@ export function ChatView({
       <section className="ods-messages-area" role="log" aria-live="polite">
         {messages.length === 0 ? (
           <div className="ods-empty-chat-state">
+            {errorMessage && (
+              <div className="ods-run-status ods-status-failed" style={{ marginBottom: "1.5rem", width: "100%", maxWidth: 600 }} role="alert">
+                <span aria-hidden="true">❌</span>
+                <span><strong>Execution Failed:</strong> {errorMessage}</span>
+              </div>
+            )}
             <div className="ods-empty-icon" aria-hidden="true">✨</div>
             <h3 className="ods-empty-title">
               {conversationTitle ? `Start chatting with ${modelId || "local model"}` : "Welcome to Open Dot Spell"}

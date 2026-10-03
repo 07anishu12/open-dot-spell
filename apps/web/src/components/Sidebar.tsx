@@ -18,8 +18,12 @@ export interface ProviderHealthStatus {
   reachable: boolean;
   latencyMs: number | null;
   error?: string;
+  warning?: string;
   providerId?: string;
   privacyMode?: string;
+  model?: string;
+  modelAvailable?: boolean;
+  state?: "ollama_unavailable" | "model_missing" | "model_available" | "request_failed" | "ollama_online";
 }
 
 interface SidebarProps {
@@ -33,6 +37,7 @@ interface SidebarProps {
   providerHealth: ProviderHealthStatus | null;
   isOpen: boolean;
   onCloseMobile: () => void;
+  onLogout?: () => void;
 }
 
 export function Sidebar({
@@ -45,9 +50,42 @@ export function Sidebar({
   onSelectModel,
   providerHealth,
   isOpen,
-  onCloseMobile
+  onCloseMobile,
+  onLogout
 }: SidebarProps) {
+  // Determine 4-state display
   const isOnline = providerHealth?.reachable === true;
+  const healthState = providerHealth?.state;
+
+  let indicatorClass = "ods-status-offline";
+  let indicatorLabel = "Ollama Offline";
+  let indicatorTooltip = providerHealth?.error || "Ollama service unavailable on 127.0.0.1:11434";
+
+  if (healthState === "model_available") {
+    indicatorClass = "ods-status-online";
+    indicatorLabel = "Ollama Online";
+    indicatorTooltip = `Model '${selectedModel}' is installed and ready (${providerHealth?.latencyMs ?? 0}ms).`;
+  } else if (healthState === "model_missing") {
+    indicatorClass = "ods-status-warning";
+    indicatorLabel = "Model Missing";
+    indicatorTooltip = providerHealth?.warning || `Model '${selectedModel}' is not installed in local Ollama.`;
+  } else if (healthState === "request_failed") {
+    indicatorClass = "ods-status-offline";
+    indicatorLabel = "Provider Error";
+    indicatorTooltip = providerHealth?.error || "Provider communication failed.";
+  } else if (isOnline) {
+    indicatorClass = "ods-status-online";
+    indicatorLabel = "Ollama Online";
+    indicatorTooltip = `Ollama service is reachable on loopback (${providerHealth?.latencyMs ?? 0}ms).`;
+  }
+
+  const privacyMode = providerHealth?.privacyMode || "local_only";
+  const privacyTitle =
+    privacyMode === "local_only"
+      ? "Enforced loopback execution. No external cloud dependencies."
+      : privacyMode === "hybrid"
+        ? "Hybrid inference mode enabled."
+        : "Local execution.";
 
   return (
     <>
@@ -65,9 +103,9 @@ export function Sidebar({
         <div className="ods-sidebar-header">
           <div className="ods-brand">
             <h1 className="ods-brand-title">Open Dot Spell</h1>
-            <div className="ods-inference-badge" title="Enforced loopback execution. No external cloud dependencies.">
+            <div className="ods-inference-badge" title={privacyTitle}>
               <span className="ods-privacy-dot" />
-              <span>local_only</span>
+              <span>{privacyMode}</span>
             </div>
           </div>
           <button
@@ -87,15 +125,11 @@ export function Sidebar({
               Inference Model
             </label>
             <div
-              className={`ods-status-indicator ${isOnline ? "ods-status-online" : "ods-status-offline"}`}
-              title={
-                isOnline
-                  ? `Ollama reachable (${providerHealth?.latencyMs ?? 0}ms)`
-                  : providerHealth?.error || "Ollama service unavailable on 127.0.0.1:11434"
-              }
+              className={`ods-status-indicator ${indicatorClass}`}
+              title={indicatorTooltip}
             >
               <span className="ods-status-dot" />
-              <span>{isOnline ? "Ollama Online" : "Ollama Offline"}</span>
+              <span>{indicatorLabel}</span>
             </div>
           </div>
 
@@ -105,25 +139,45 @@ export function Sidebar({
             onChange={(e) => onSelectModel(e.target.value)}
             className="ods-select"
             aria-label="Select Active Model"
+            disabled={models.length === 0}
           >
             {models.length > 0 ? (
-              models.map((m) => (
-                <option key={m.modelId} value={m.modelId}>
-                  {m.name}
-                </option>
-              ))
-            ) : (
               <>
-                <option value="llama3:8b">llama3:8b (Ollama)</option>
-                <option value="gemma:2b">gemma:2b (Ollama)</option>
-                <option value="synthetic-model-v1">synthetic-model-v1 (Deterministic Double)</option>
+                {models.map((m) => (
+                  <option key={m.modelId} value={m.modelId}>
+                    {m.name}
+                  </option>
+                ))}
+                {selectedModel && !models.some((m) => m.modelId === selectedModel) && (
+                  <option value={selectedModel} disabled>
+                    {selectedModel} (Not installed)
+                  </option>
+                )}
               </>
+            ) : (
+              <option value="" disabled>
+                {providerHealth?.reachable === false
+                  ? "Ollama offline (no models available)"
+                  : "No models installed in Ollama"}
+              </option>
             )}
           </select>
 
-          {!isOnline && (
+          {healthState === "model_missing" && (
             <div className="ods-provider-warning" role="note">
-              <strong>Ollama offline:</strong> Run <code>ollama serve</code> to connect local models, or use synthetic mode.
+              <strong>Model missing:</strong> Model <code>{selectedModel}</code> is not installed in local Ollama. Run <code>ollama pull {selectedModel}</code> in terminal.
+            </div>
+          )}
+
+          {(!isOnline || healthState === "ollama_unavailable") && (
+            <div className="ods-provider-warning" role="note">
+              <strong>Ollama offline:</strong> Run <code>ollama serve</code> to start the local inference service.
+            </div>
+          )}
+
+          {healthState === "request_failed" && (
+            <div className="ods-provider-warning" role="note">
+              <strong>Provider error:</strong> {providerHealth?.error || "Inference request failed."}
             </div>
           )}
         </div>
@@ -172,6 +226,20 @@ export function Sidebar({
             </ul>
           )}
         </nav>
+
+        {onLogout && (
+          <div className="ods-sidebar-footer" style={{ padding: "0.75rem 1rem", borderTop: "1px solid var(--color-border)" }}>
+            <button
+              type="button"
+              onClick={onLogout}
+              className="ods-btn ods-btn-ghost"
+              style={{ width: "100%", justifyContent: "center", fontSize: "0.8rem", color: "var(--color-text-muted)" }}
+              aria-label="Sign out of owner session"
+            >
+              Sign Out Owner Session
+            </button>
+          </div>
+        )}
       </aside>
     </>
   );

@@ -742,19 +742,105 @@ export function buildApp(options: AppOptions = {}): FastifyInstance {
   app.get(
     "/api/providers/status",
     { preHandler: requireOwnerAuth },
-    async (_request, reply) => {
+    async (request, reply) => {
       const provider =
         options.provider ??
         new OllamaProvider({ privacyMode: options.privacyMode ?? "local_only" });
-      const health = await provider.checkHealth();
+      const query = (request.query || {}) as { model?: string };
+      const requestedModel = typeof query.model === "string" && query.model.trim() ? query.model.trim() : undefined;
+
+      let health;
+      try {
+        health = await provider.checkHealth();
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.code(200).send({
+          providerId: provider.providerId,
+          providerType: provider.providerType,
+          isLocal: provider.isLocal,
+          privacyMode: options.privacyMode ?? "local_only",
+          reachable: false,
+          latencyMs: null,
+          error: message,
+          model: requestedModel,
+          modelAvailable: false,
+          state: "request_failed"
+        });
+      }
+
+      if (!health.reachable) {
+        return reply.code(200).send({
+          providerId: provider.providerId,
+          providerType: provider.providerType,
+          isLocal: provider.isLocal,
+          privacyMode: options.privacyMode ?? "local_only",
+          reachable: false,
+          latencyMs: null,
+          error: health.error || "Ollama service unavailable",
+          model: requestedModel,
+          modelAvailable: false,
+          state: "ollama_unavailable"
+        });
+      }
+
+      // Ollama daemon is reachable. If a specific model was requested, check if it exists
+      if (requestedModel) {
+        try {
+          const models = await provider.discoverModels();
+          const found = models.some(
+            (m) => m.modelId === requestedModel || m.name === requestedModel
+          );
+          if (found) {
+            return reply.code(200).send({
+              providerId: provider.providerId,
+              providerType: provider.providerType,
+              isLocal: provider.isLocal,
+              privacyMode: options.privacyMode ?? "local_only",
+              reachable: true,
+              latencyMs: health.latencyMs,
+              model: requestedModel,
+              modelAvailable: true,
+              state: "model_available"
+            });
+          } else {
+            return reply.code(200).send({
+              providerId: provider.providerId,
+              providerType: provider.providerType,
+              isLocal: provider.isLocal,
+              privacyMode: options.privacyMode ?? "local_only",
+              reachable: true,
+              latencyMs: health.latencyMs,
+              model: requestedModel,
+              modelAvailable: false,
+              warning: `Ollama is running, but model '${requestedModel}' is not installed. Run 'ollama pull ${requestedModel}'.`,
+              state: "model_missing"
+            });
+          }
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          return reply.code(200).send({
+            providerId: provider.providerId,
+            providerType: provider.providerType,
+            isLocal: provider.isLocal,
+            privacyMode: options.privacyMode ?? "local_only",
+            reachable: true,
+            latencyMs: health.latencyMs,
+            model: requestedModel,
+            modelAvailable: false,
+            error: `Failed to query installed models: ${message}`,
+            state: "request_failed"
+          });
+        }
+      }
+
       return reply.code(200).send({
         providerId: provider.providerId,
         providerType: provider.providerType,
         isLocal: provider.isLocal,
         privacyMode: options.privacyMode ?? "local_only",
-        reachable: health.reachable,
+        reachable: true,
         latencyMs: health.latencyMs,
-        error: health.error
+        state: "ollama_online"
       });
     }
   );

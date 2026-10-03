@@ -89,33 +89,43 @@ export function App() {
   // 2. Load Provider Status & Discovered Models
   const loadProviderInfo = useCallback(async () => {
     try {
+      const statusUrl = selectedModel
+        ? `/api/providers/status?model=${encodeURIComponent(selectedModel)}`
+        : "/api/providers/status";
       const [statusRes, modelsRes] = await Promise.all([
-        fetch("/api/providers/status", { credentials: "include" }),
+        fetch(statusUrl, { credentials: "include" }),
         fetch("/api/providers/models", { credentials: "include" })
       ]);
 
       if (statusRes.ok) {
         const statusData = (await statusRes.json()) as ProviderHealthStatus;
         setProviderHealth(statusData);
+      } else if (statusRes.status === 401) {
+        setIsAuthenticated(false);
       }
 
       if (modelsRes.ok) {
         const modelsData = await modelsRes.json();
-        if (Array.isArray(modelsData.models) && modelsData.models.length > 0) {
+        if (Array.isArray(modelsData.models)) {
           setModels(modelsData.models);
-          // If current selectedModel is not in discovered models, select first discovered
-          const hasSelected = modelsData.models.some((m: DiscoveredModelItem) => m.modelId === selectedModel);
-          if (!hasSelected && modelsData.models[0]?.modelId) {
-            setSelectedModel(modelsData.models[0].modelId);
-            setStoredItem(STORAGE_KEY_MODEL, modelsData.models[0].modelId);
+          if (modelsData.models.length > 0) {
+            // If current selectedModel is not in discovered models, select first discovered
+            const hasSelected = modelsData.models.some((m: DiscoveredModelItem) => m.modelId === selectedModel);
+            if (!hasSelected && modelsData.models[0]?.modelId) {
+              setSelectedModel(modelsData.models[0].modelId);
+              setStoredItem(STORAGE_KEY_MODEL, modelsData.models[0].modelId);
+            }
           }
         }
+      } else if (modelsRes.status === 401) {
+        setIsAuthenticated(false);
       }
     } catch {
       setProviderHealth({
         reachable: false,
         latencyMs: null,
-        error: "Unable to query provider status on 127.0.0.1:3000"
+        error: "Unable to query provider status on 127.0.0.1:3000",
+        state: "ollama_unavailable"
       });
     }
   }, [selectedModel]);
@@ -125,6 +135,10 @@ export function App() {
     try {
       // Load or auto-initialize default workspace
       const wsRes = await fetch("/api/workspaces", { credentials: "include" });
+      if (wsRes.status === 401) {
+        setIsAuthenticated(false);
+        return;
+      }
       let currentWs = DEFAULT_WORKSPACE_ID;
       if (wsRes.ok) {
         const wsData = await wsRes.json();
@@ -136,6 +150,10 @@ export function App() {
       const convRes = await fetch(`/api/workspaces/${encodeURIComponent(currentWs)}/conversations`, {
         credentials: "include"
       });
+      if (convRes.status === 401) {
+        setIsAuthenticated(false);
+        return;
+      }
       if (convRes.ok) {
         const convData = await convRes.json();
         const convList = (convData.conversations as ConversationItem[]) || [];
@@ -212,6 +230,18 @@ export function App() {
   // 5. Send Message & Subscribe to Real SSE Stream
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || runState === "queued" || runState === "responding") return;
+
+    if (providerHealth && !providerHealth.reachable) {
+      setRunState("failed");
+      setErrorMessage("Ollama is offline. Run 'ollama serve' to start the local inference service.");
+      return;
+    }
+
+    if (providerHealth?.state === "model_missing") {
+      setRunState("failed");
+      setErrorMessage(`Model '${selectedModel}' is not installed in local Ollama. Run 'ollama pull ${selectedModel}' in terminal.`);
+      return;
+    }
 
     let targetConvId = activeConversationId;
 
@@ -389,6 +419,18 @@ export function App() {
     setRunState("interrupted");
   };
 
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include"
+      });
+    } catch {
+      // Ignore
+    }
+    setIsAuthenticated(false);
+  };
+
   // Active conversation object
   const activeConversation = conversations.find((c) => c.id === activeConversationId);
 
@@ -428,6 +470,7 @@ export function App() {
         providerHealth={providerHealth}
         isOpen={isSidebarOpen}
         onCloseMobile={() => setIsSidebarOpen(false)}
+        onLogout={isAuthenticated ? handleLogout : undefined}
       />
 
       {/* 3. Main Chat View & Composer */}
@@ -435,6 +478,7 @@ export function App() {
         <ChatView
           conversationTitle={activeConversation?.title}
           modelId={activeConversation?.modelId || selectedModel}
+          privacyMode={providerHealth?.privacyMode || "local_only"}
           messages={messages}
           runState={runState}
           errorMessage={errorMessage}

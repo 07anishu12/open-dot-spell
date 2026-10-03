@@ -191,12 +191,21 @@ body {
   color: var(--color-success);
 }
 
-.ods-status-offline .ods-status-dot {
+.ods-status-warning .ods-status-dot {
   background-color: var(--color-warning);
+  box-shadow: 0 0 6px var(--color-warning);
+}
+
+.ods-status-warning {
+  color: var(--color-warning);
+}
+
+.ods-status-offline .ods-status-dot {
+  background-color: var(--color-danger);
 }
 
 .ods-status-offline {
-  color: var(--color-warning);
+  color: var(--color-danger);
 }
 
 .ods-provider-warning {

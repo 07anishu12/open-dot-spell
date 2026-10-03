@@ -604,7 +604,17 @@ Establish a single, server-side dispatch boundary and typed tool registry for to
 - Real side-effecting tools (file system, command execution, network) are intentionally excluded and blocked until authorized in Step 12+.
 - Single-worker concurrency remains provisional (to be generalized in Step 18).
 
+### Audit & Repair Resolution (Step 10 & 11 Independent Audit)
+
+- Repaired server entrypoint (`apps/server/src/index.ts`): instantiated shared `RunEventBus` and passed it to both `WorkerProcess` and `buildApp` so live inference events stream to SSE subscribers in production.
+- Repaired provider health check (`apps/server/src/app.ts`): implemented 4 distinct Ollama health states (`ollama_unavailable`, `model_missing`, `model_available`, `request_failed`) on `GET /api/providers/status?model=<modelId>`.
+- Repaired model discovery in frontend (`apps/web/src/components/Sidebar.tsx`): removed hardcoded models, added truthful empty state (`<option disabled>`), 4-state indicator (`Ollama Online`, `Model Missing`, `Ollama Offline`, `Provider Error`), dynamic privacy mode, and owner sign-out action.
+- Repaired error rendering in chat view (`apps/web/src/components/ChatView.tsx`): rendered error alerts in empty conversation state as well as populated conversations, with dynamic privacy indicator.
+- Repaired frontend controller (`apps/web/src/App.tsx`): queried provider status with selected model, handled 401 session expiry, and blocked prompt submission when Ollama is offline or model is missing with readable error feedback.
+- Expanded test coverage: 14 test suites, 133/133 tests passing (added 4-state server tests in `apps/server/test/health.test.ts` and 5 new frontend integration tests in `apps/web/test/app.test.tsx` verifying model missing warning, empty model lists, malicious HTML/script sanitization, offline prompt blocking, and owner sign-out).
+
 ### Next step
 
 Step 12. Do not begin until the next numbered prompt is supplied.
+
 

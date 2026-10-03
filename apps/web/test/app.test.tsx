@@ -101,14 +101,36 @@ describe("Open Dot Spell Web UI (Step 10)", () => {
 
       // Provider status
       if (url.includes("/api/providers/status")) {
+        const urlObj = new URL(url, "http://127.0.0.1:3000");
+        const modelParam = urlObj.searchParams.get("model");
+        const modelExists = modelParam ? modelsList.some(m => m.modelId === modelParam) : true;
+        const state = !isReachable
+          ? "ollama_unavailable"
+          : modelParam && !modelExists
+            ? "model_missing"
+            : "model_available";
+
         return Promise.resolve({
           ok: true,
           json: async () => ({
             providerId: "prov_ollama_local",
             reachable: isReachable,
             latencyMs: isReachable ? 12 : null,
+            state,
+            model: modelParam,
+            modelAvailable: isReachable && modelExists,
+            warning: state === "model_missing" ? `Ollama is running, but model '${modelParam}' is not installed.` : undefined,
             error: isReachable ? undefined : "Ollama unavailable on 127.0.0.1:11434"
           })
+        });
+      }
+
+      // Logout request
+      if (url.includes("/api/auth/logout")) {
+        isAuth = false;
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ success: true })
         });
       }
 
@@ -445,6 +467,133 @@ describe("Open Dot Spell Web UI (Step 10)", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Response interrupted.")).toBeDefined();
+    });
+  });
+
+  it("11. detects model_missing state and displays warning banner without hardcoded fakes", async () => {
+    // Stored model in localStorage is "non-existent-model"
+    window.localStorage.setItem("ods_selected_model", "missing-model-xyz");
+    setupMockFetch({
+      authenticated: true,
+      providerReachable: true,
+      models: [{ modelId: "llama3:8b", name: "Llama 3 8B" }]
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      // Model select selects the discovered model
+      const select = screen.getByLabelText("Select Active Model") as HTMLSelectElement;
+      expect(select.value).toBe("llama3:8b");
+    });
+  });
+
+  it("12. handles empty model list truthfully with disabled option and no fabricated models", async () => {
+    setupMockFetch({
+      authenticated: true,
+      providerReachable: true,
+      models: []
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      const select = screen.getByLabelText("Select Active Model") as HTMLSelectElement;
+      expect(select.disabled).toBe(true);
+      expect(screen.getByText("No models installed in Ollama")).toBeDefined();
+      // Ensure fake models like gemma:2b are not fabricated in the DOM
+      expect(screen.queryByText("gemma:2b (Ollama)")).toBeNull();
+    });
+  });
+
+  it("13. strictly neutralizes malicious HTML, javascript:, and onerror script payloads in Markdown", async () => {
+    setupMockFetch({
+      authenticated: true,
+      conversations: [{
+        id: "conv_sec_test",
+        workspaceId: "ws_default",
+        title: "Malicious Payload Test",
+        modelId: "synthetic-model-v1",
+        providerId: "ollama",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }],
+      messages: [
+        { id: "m1", role: "user", content: "Test payloads" },
+        {
+          id: "m2",
+          role: "assistant",
+          content: [
+            "Malicious tests:",
+            "- `<img src='x' onerror='alert(document.cookie)'>`",
+            "- `<script>window.location='https://attacker.com'</script>`",
+            "- [Dangerous Javascript](javascript:alert(1))",
+            "- [Dangerous Data URI](data:text/html,<script>alert(1)</script>)",
+            "- [Dangerous VBScript](vbscript:msgbox(1))",
+            "- [Safe Anchor](https://example.com/safe)"
+          ].join("\n")
+        }
+      ]
+    });
+
+    window.history.replaceState({}, "", "/?c=conv_sec_test");
+    render(<App />);
+
+    await waitFor(() => {
+      // Safe link is rendered as an <a> tag
+      const safeLink = screen.getByText("Safe Anchor") as HTMLAnchorElement;
+      expect(safeLink.tagName).toBe("A");
+      expect(safeLink.href).toBe("https://example.com/safe");
+
+      // Dangerous schemes are NOT rendered as active anchors
+      expect(document.querySelector('a[href*="javascript:"]')).toBeNull();
+      expect(document.querySelector('a[href*="data:"]')).toBeNull();
+      expect(document.querySelector('a[href*="vbscript:"]')).toBeNull();
+
+      // Ensure no <img> or <script> elements are dynamically injected
+      expect(document.querySelector("img[onerror]")).toBeNull();
+      expect(document.querySelector("script:not([type])")).toBeNull();
+    });
+  });
+
+  it("14. blocks prompt submission when Ollama is offline with clear user notification", async () => {
+    setupMockFetch({
+      authenticated: true,
+      providerReachable: false,
+      models: []
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Ollama Offline")).toBeDefined();
+      expect(screen.getByLabelText("Message input")).toBeDefined();
+    });
+
+    const textarea = screen.getByLabelText("Message input");
+    fireEvent.change(textarea, { target: { value: "Hello while offline" } });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Ollama is offline/i)).toBeDefined();
+      expect(screen.getByText(/Execution Failed:/i)).toBeDefined();
+    });
+  });
+
+  it("15. supports owner sign-out returning to unauthenticated setup screen", async () => {
+    setupMockFetch({ authenticated: true });
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Sign out of owner session")).toBeDefined();
+    });
+
+    const logoutBtn = screen.getByLabelText("Sign out of owner session");
+    fireEvent.click(logoutBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Open Dot Spell Owner Setup")).toBeDefined();
+      expect(screen.queryByLabelText("Sign out of owner session")).toBeNull();
     });
   });
 });
